@@ -432,6 +432,7 @@ async function publishCampaign(req, res) {
       start_time,
       end_time,
       status,
+      page_id,
       whatsapp_phone_number: whatsappNumber,
     });
 

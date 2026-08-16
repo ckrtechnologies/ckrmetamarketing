@@ -107,6 +107,7 @@ async function createAdSet(accessToken, actId, {
   end_time,
   status = 'PAUSED',
   whatsapp_phone_number,
+  page_id,
 }) {
   const payload = {
     name,
@@ -120,14 +121,13 @@ async function createAdSet(accessToken, actId, {
       age_max: targeting.age_max || 65,
       genders: targeting.genders || [0],   // 0=all, 1=male, 2=female
       publisher_platforms: ['facebook', 'instagram'],
-      facebook_positions: ['feed', 'story', 'reels'],
-      instagram_positions: ['stream', 'story', 'reels'],
       ...(targeting.interests?.length ? {
         flexible_spec: [{ interests: targeting.interests.map(i => ({ id: i.id, name: i.name })) }],
       } : {}),
     },
     promoted_object: {
-      whatsapp_phone_number: whatsapp_phone_number,
+      ...(page_id ? { page_id } : {}),
+      ...(whatsapp_phone_number ? { whatsapp_phone_number } : {}),
     },
     status,
   };
