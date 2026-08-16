@@ -278,11 +278,13 @@ function OverviewTab({ account }) {
 // ═══════════════════════════════════════════════════════════════
 
 function CampaignsTab({ account, onRefresh }) {
-  const [campaigns, setCampaigns] = useState([]);
-  const [loading,   setLoading]   = useState(false);
-  const [error,     setError]     = useState('');
-  const [expandedId, setExpandedId] = useState(null);
-  const [insights,  setInsights]  = useState({});
+  const [campaigns,    setCampaigns]    = useState([]);
+  const [search,       setSearch]       = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [loading,      setLoading]      = useState(false);
+  const [error,        setError]        = useState('');
+  const [expandedId,   setExpandedId]   = useState(null);
+  const [insights,     setInsights]     = useState({});
 
   useEffect(() => { if (account) load(); }, [account]);
 
@@ -322,22 +324,60 @@ function CampaignsTab({ account, onRefresh }) {
 
   if (!account) return <div className="card" style={{ textAlign: 'center', padding: 48 }}><p style={{ color: 'var(--clr-text-2)' }}>Connect an Ad Account first</p></div>;
 
+  const filteredCampaigns = campaigns.filter(c => {
+    if (statusFilter && c.status !== statusFilter) return false;
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      return (c.name || '').toLowerCase().includes(q) || (c.id || '').includes(q);
+    }
+    return true;
+  });
+
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-        <div style={{ color: 'var(--clr-text-2)', fontSize: 13 }}>{campaigns.length} campaigns in {account.name}</div>
-        <button className="btn btn--ghost btn--sm" onClick={load} disabled={loading}>↻ Refresh</button>
+      {/* Search & Filter Bar */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flex: 1, minWidth: 260 }}>
+          <input
+            className="form-input"
+            style={{ maxWidth: 300, padding: '7px 12px', fontSize: 13 }}
+            placeholder="🔍 Search campaigns..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+          />
+          <div style={{ display: 'flex', gap: 4 }}>
+            {['', 'ACTIVE', 'PAUSED'].map(s => (
+              <button
+                key={s}
+                className={`chat-filter-btn${statusFilter === s ? ' chat-filter-btn--active' : ''}`}
+                onClick={() => setStatusFilter(s)}
+              >
+                {s === '' ? `All (${campaigns.length})` : s === 'ACTIVE' ? `🟢 Active (${campaigns.filter(x => x.status === 'ACTIVE').length})` : `⏸ Paused (${campaigns.filter(x => x.status === 'PAUSED').length})`}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ color: 'var(--clr-text-3)', fontSize: 12 }}>Showing {filteredCampaigns.length} of {campaigns.length}</div>
+          <button className="btn btn--ghost btn--sm" onClick={load} disabled={loading}>↻ Refresh</button>
+        </div>
       </div>
 
       {error && <div className="alert alert--error">{error}</div>}
 
       {loading ? (
         <div className="loading-center"><div className="spinner" /></div>
-      ) : campaigns.length === 0 ? (
+      ) : filteredCampaigns.length === 0 ? (
         <div className="card" style={{ textAlign: 'center', padding: 48 }}>
           <div style={{ fontSize: 40, marginBottom: 12 }}>📣</div>
-          <h3>No campaigns yet</h3>
-          <p style={{ color: 'var(--clr-text-2)', marginBottom: 16 }}>Create your first Click-to-WhatsApp campaign</p>
+          <h3>No matching campaigns</h3>
+          <p style={{ color: 'var(--clr-text-2)', marginBottom: 16 }}>
+            {search || statusFilter ? 'Try clearing search or filters' : 'Create your first Click-to-WhatsApp campaign'}
+          </p>
+          {(search || statusFilter) && (
+            <button className="btn btn--secondary btn--sm" onClick={() => { setSearch(''); setStatusFilter(''); }}>Clear Filters</button>
+          )}
         </div>
       ) : (
         <div className="table-wrap">
@@ -352,7 +392,8 @@ function CampaignsTab({ account, onRefresh }) {
               </tr>
             </thead>
             <tbody>
-              {campaigns.map(c => (
+              {filteredCampaigns.map(c => (
+
                 <React.Fragment key={c.id}>
                   <tr>
                     <td>
