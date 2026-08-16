@@ -32,10 +32,29 @@ async function getAdAccount(accessToken, actId) {
   const r = await client(accessToken).get(`/${actId}`, {
     params: {
       access_token: accessToken,
-      fields: 'id,name,currency,timezone_name,account_status,spend_cap,amount_spent',
+      fields: 'id,name,currency,timezone_name,account_status,spend_cap,amount_spent,balance,funding_source_details,min_daily_budget,account_id',
     },
   });
-  return r.data;
+  const data = r.data || {};
+  const spendCap = parseInt(data.spend_cap) || 0;
+  const amountSpent = parseInt(data.amount_spent) || 0;
+  const spendCapRemaining = spendCap > 0 ? Math.max(0, spendCap - amountSpent) : null;
+  const fundingDisplay = data.funding_source_details?.display_string || '';
+
+  // Extract numerical available balance if present in display_string (e.g. "Available balance (₹2,285.86 INR)")
+  const balMatch = fundingDisplay.match(/[\d,]+\.?\d*/);
+  const availableBalStr = balMatch ? balMatch[0] : null;
+
+  return {
+    ...data,
+    spend_cap_num: spendCap ? spendCap / 100 : null,
+    amount_spent_num: amountSpent ? amountSpent / 100 : 0,
+    spend_cap_remaining: spendCapRemaining,
+    spend_cap_remaining_num: spendCapRemaining !== null ? spendCapRemaining / 100 : null,
+    funding_source_display: fundingDisplay,
+    available_balance_str: availableBalStr,
+    balance_num: (parseInt(data.balance) || 0) / 100,
+  };
 }
 
 // ── Campaigns ─────────────────────────────────────────────────

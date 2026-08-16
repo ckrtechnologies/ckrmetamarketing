@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   listAdAccounts, connectAdAccount, disconnectAdAccount, fetchMetaAccounts,
   listCampaigns, createCampaign, updateCampaign, deleteCampaign,
-  getAccountInsights, getCampaignInsights,
+  getAccountInsights, getCampaignInsights, getAccountBalance,
   listAdSets, updateAdSet, deleteAdSet,
   listAds, updateAd, deleteAd,
   listAudiences, createCustomAudience, createLookalikeAudience, createSavedAudience, deleteAudience, searchInterests,
@@ -79,6 +79,7 @@ export default function AdsPage() {
   // Account state
   const [accounts,       setAccounts]       = useState([]);
   const [activeAccount,  setActiveAccount]  = useState(null);
+  const [accountBalance, setAccountBalance] = useState(null);
   const [loadingAccounts, setLoadingAccounts] = useState(true);
 
   // Error / success
@@ -93,7 +94,13 @@ export default function AdsPage() {
       const data = await listAdAccounts();
       const accs = data.accounts || [];
       setAccounts(accs);
-      setActiveAccount(accs.find(a => a.is_active) || accs[0] || null);
+      const active = accs.find(a => a.is_active) || accs[0] || null;
+      setActiveAccount(active);
+      if (active) {
+        getAccountBalance().then(res => {
+          if (res.balance_info) setAccountBalance(res.balance_info);
+        }).catch(() => {});
+      }
     } catch (e) { setError(e.message); }
     finally { setLoadingAccounts(false); }
   }
@@ -114,8 +121,26 @@ export default function AdsPage() {
           <p>Create, publish, and track your Meta ad campaigns</p>
         </div>
         {activeAccount && (
-          <div className="ads-account-chip">
-            ✅ {activeAccount.name} ({activeAccount.act_id}) — {activeAccount.currency}
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            {accountBalance?.available_balance_str ? (
+              <div className="ads-account-chip" style={{ background: 'rgba(37, 211, 102, 0.15)', color: '#25d366', borderColor: 'rgba(37, 211, 102, 0.35)', fontWeight: 700 }}>
+                💳 Balance: <strong>₹{accountBalance.available_balance_str}</strong>
+              </div>
+            ) : accountBalance?.funding_source_display ? (
+              <div className="ads-account-chip" style={{ background: 'rgba(37, 211, 102, 0.15)', color: '#25d366', borderColor: 'rgba(37, 211, 102, 0.35)', fontWeight: 700 }}>
+                💳 {accountBalance.funding_source_display}
+              </div>
+            ) : null}
+
+            {accountBalance?.spend_cap_remaining_num !== null && accountBalance?.spend_cap_remaining_num !== undefined && (
+              <div className="ads-account-chip" style={{ background: 'rgba(24, 119, 242, 0.15)', color: '#1877f2', borderColor: 'rgba(24, 119, 242, 0.35)', fontWeight: 700 }}>
+                🛑 Spend Cap Left: <strong>{formatCurrency(accountBalance.spend_cap_remaining_num * 100, activeAccount.currency)}</strong>
+              </div>
+            )}
+
+            <div className="ads-account-chip">
+              ✅ {activeAccount.name} ({activeAccount.act_id}) — {activeAccount.currency}
+            </div>
           </div>
         )}
       </div>
@@ -147,11 +172,11 @@ export default function AdsPage() {
       </div>
 
       {/* Tab Content */}
-      {tab === 'overview'  && <OverviewTab account={activeAccount} />}
+      {tab === 'overview'  && <OverviewTab account={activeAccount} accountBalance={accountBalance} />}
       {tab === 'campaigns' && <CampaignsTab account={activeAccount} onRefresh={loadAccounts} />}
       {tab === 'create'    && <CreateAdTab  account={activeAccount} accounts={accounts} onSuccess={(msg) => { setSuccess(msg); setTab('campaigns'); }} />}
       {tab === 'audiences' && <AudiencesTab account={activeAccount} />}
-      {tab === 'accounts'  && <AccountsTab accounts={accounts} onRefresh={loadAccounts} />}
+      {tab === 'accounts'  && <AccountsTab accounts={accounts} onRefresh={loadAccounts} accountBalance={accountBalance} />}
     </div>
   );
 }
@@ -160,14 +185,16 @@ export default function AdsPage() {
 //  TAB: OVERVIEW (Insights Dashboard)
 // ═══════════════════════════════════════════════════════════════
 
-function OverviewTab({ account }) {
+function OverviewTab({ account, accountBalance }) {
   const [insights,    setInsights]    = useState([]);
   const [totals,      setTotals]      = useState({});
+  const [balanceInfo, setBalanceInfo] = useState(accountBalance || null);
   const [datePreset,  setDatePreset]  = useState('last_30d');
   const [loading,     setLoading]     = useState(false);
   const [error,       setError]       = useState('');
 
   useEffect(() => { if (account) loadInsights(); }, [account, datePreset]);
+  useEffect(() => { if (accountBalance) setBalanceInfo(accountBalance); }, [accountBalance]);
 
   async function loadInsights() {
     setLoading(true); setError('');
@@ -175,6 +202,7 @@ function OverviewTab({ account }) {
       const data = await getAccountInsights({ date_preset: datePreset });
       setInsights(data.insights || []);
       setTotals(data.totals || {});
+      if (data.balance_info) setBalanceInfo(data.balance_info);
     } catch (e) {
       setError(e.message);
     } finally { setLoading(false); }
@@ -188,6 +216,25 @@ function OverviewTab({ account }) {
   );
 
   const kpis = [
+    ...(balanceInfo?.available_balance_str ? [{
+      label: 'Available Balance',
+      value: `₹${balanceInfo.available_balance_str}`,
+      sub: 'Prepaid wallet balance',
+      gradient: 'linear-gradient(135deg, rgba(37,211,102,.15), transparent)'
+    }] : balanceInfo?.funding_source_display ? [{
+      label: 'Account Funds',
+      value: balanceInfo.funding_source_display.replace(/Available balance \((.+)\)/, '$1'),
+      sub: 'Funding source balance',
+      gradient: 'linear-gradient(135deg, rgba(37,211,102,.15), transparent)'
+    }] : []),
+
+    ...(balanceInfo?.spend_cap_remaining_num !== null && balanceInfo?.spend_cap_remaining_num !== undefined ? [{
+      label: 'Spend Cap Remaining',
+      value: formatCurrency(balanceInfo.spend_cap_remaining_num * 100, account.currency),
+      sub: `of ${formatCurrency((balanceInfo.spend_cap_num || 0) * 100, account.currency)} limit`,
+      gradient: 'linear-gradient(135deg, rgba(24,119,242,.15), transparent)'
+    }] : []),
+
     { label: 'Total Spend',   value: formatCurrency(totals.spend, account.currency), sub: 'Ad budget consumed', gradient: 'linear-gradient(135deg,rgba(255,165,0,.1),transparent)' },
     { label: 'Reach',         value: formatNum(totals.reach),                         sub: 'Unique users reached', gradient: 'linear-gradient(135deg,rgba(24,119,242,.1),transparent)' },
     { label: 'Impressions',   value: formatNum(totals.impressions),                   sub: 'Total ad views', gradient: 'linear-gradient(135deg,rgba(37,211,102,.08),transparent)' },
@@ -196,6 +243,7 @@ function OverviewTab({ account }) {
     { label: 'CPC',           value: formatCurrency(totals.cpc, account.currency),    sub: 'Cost per click', gradient: 'linear-gradient(135deg,rgba(0,200,200,.08),transparent)' },
     { label: 'CPM',           value: formatCurrency(totals.cpm, account.currency),    sub: 'Cost per 1000 views', gradient: 'linear-gradient(135deg,rgba(255,200,0,.08),transparent)' },
   ];
+
 
   return (
     <div>
@@ -2057,7 +2105,7 @@ function AudiencesTab({ account }) {
 //  TAB: AD ACCOUNTS MANAGEMENT
 // ═══════════════════════════════════════════════════════════════
 
-function AccountsTab({ accounts, onRefresh }) {
+function AccountsTab({ accounts, onRefresh, accountBalance }) {
   const [showConnect,   setShowConnect]   = useState(false);
   const [accessToken,   setAccessToken]   = useState('');
   const [actId,         setActId]         = useState('');
@@ -2097,8 +2145,68 @@ function AccountsTab({ accounts, onRefresh }) {
     } catch (e) { alert(e.message); }
   }
 
+  const activeAcc = accounts.find(a => a.is_active) || accounts[0];
+
   return (
     <div>
+      {/* Active Account Balance & Spend Summary */}
+      {activeAcc && accountBalance && (
+        <div className="card" style={{ marginBottom: 20, padding: '20px 24px', background: 'linear-gradient(135deg, rgba(37,211,102,.06), rgba(24,119,242,.06))', border: '1px solid var(--clr-border)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, flexWrap: 'wrap', gap: 10 }}>
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--clr-text-3)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                Meta Ad Account Funds & Spend Status
+              </div>
+              <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--clr-text)', marginTop: 2 }}>
+                {activeAcc.name} ({activeAcc.act_id})
+              </div>
+            </div>
+            <button className="btn btn--secondary btn--sm" onClick={onRefresh} style={{ fontSize: 12, padding: '4px 10px' }}>
+              ↻ Refresh Balance
+            </button>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16 }}>
+            {accountBalance.available_balance_str ? (
+              <div style={{ background: 'var(--clr-surface)', padding: '12px 16px', borderRadius: 8, border: '1px solid var(--clr-border)' }}>
+                <div style={{ fontSize: 11, color: 'var(--clr-text-3)', fontWeight: 700, textTransform: 'uppercase' }}>💳 Available Balance</div>
+                <div style={{ fontSize: 22, fontWeight: 900, color: '#25d366', fontFamily: 'var(--font-display)', marginTop: 4 }}>
+                  ₹{accountBalance.available_balance_str}
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--clr-text-3)', marginTop: 2 }}>Prepaid funds ready to spend</div>
+              </div>
+            ) : accountBalance.funding_source_display ? (
+              <div style={{ background: 'var(--clr-surface)', padding: '12px 16px', borderRadius: 8, border: '1px solid var(--clr-border)' }}>
+                <div style={{ fontSize: 11, color: 'var(--clr-text-3)', fontWeight: 700, textTransform: 'uppercase' }}>💳 Funding Source</div>
+                <div style={{ fontSize: 15, fontWeight: 800, color: '#25d366', marginTop: 4 }}>
+                  {accountBalance.funding_source_display}
+                </div>
+              </div>
+            ) : null}
+
+            {accountBalance.spend_cap_remaining_num !== null && accountBalance.spend_cap_remaining_num !== undefined && (
+              <div style={{ background: 'var(--clr-surface)', padding: '12px 16px', borderRadius: 8, border: '1px solid var(--clr-border)' }}>
+                <div style={{ fontSize: 11, color: 'var(--clr-text-3)', fontWeight: 700, textTransform: 'uppercase' }}>🛑 Spend Cap Remaining</div>
+                <div style={{ fontSize: 22, fontWeight: 900, color: '#1877f2', fontFamily: 'var(--font-display)', marginTop: 4 }}>
+                  {formatCurrency(accountBalance.spend_cap_remaining_num * 100, activeAcc.currency)}
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--clr-text-3)', marginTop: 2 }}>
+                  Cap limit: {formatCurrency((accountBalance.spend_cap_num || 0) * 100, activeAcc.currency)}
+                </div>
+              </div>
+            )}
+
+            <div style={{ background: 'var(--clr-surface)', padding: '12px 16px', borderRadius: 8, border: '1px solid var(--clr-border)' }}>
+              <div style={{ fontSize: 11, color: 'var(--clr-text-3)', fontWeight: 700, textTransform: 'uppercase' }}>💸 Total Lifetime Spent</div>
+              <div style={{ fontSize: 22, fontWeight: 900, color: 'var(--clr-text)', fontFamily: 'var(--font-display)', marginTop: 4 }}>
+                {formatCurrency((accountBalance.amount_spent_num || 0) * 100, activeAcc.currency)}
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--clr-text-3)', marginTop: 2 }}>Across all campaigns</div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
         <div style={{ color: 'var(--clr-text-2)', fontSize: 13 }}>{accounts.length} connected ad account{accounts.length !== 1 ? 's' : ''}</div>
         <button className="btn btn--primary btn--sm" onClick={() => setShowConnect(true)}>+ Connect Ad Account</button>

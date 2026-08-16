@@ -32,8 +32,10 @@ export const updateAd          = (id, data)       => apiCall('PATCH',  `/v2/ads/
 export const deleteAd          = (id)             => apiCall('DELETE', `/v2/ads/ads/${id}`);
 
 
-// ── Insights Dashboard ───────────────────────────────────────────
+// ── Insights Dashboard & Balance ─────────────────────────────────
 export const getAccountInsights = (params = {})   => apiCall('GET',    '/v2/ads/insights?' + new URLSearchParams(params).toString());
+export const getAccountBalance  = ()              => apiCall('GET',    '/v2/ads/balance');
+
 
 // ── Audiences ────────────────────────────────────────────────────
 export const listAudiences            = ()               => apiCall('GET',    '/v2/ads/audiences');

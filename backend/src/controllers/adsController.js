@@ -363,13 +363,29 @@ async function getCampaignInsights(req, res) {
   }
 }
 
+async function getAccountBalance(req, res) {
+  try {
+    const account = await adsRepo.getActiveAdAccount(req.orgId);
+    if (!account) return res.status(404).json({ error: 'No connected Ad Account' });
+
+    const balanceInfo = await metaAds.getAdAccount(account.access_token, account.act_id);
+    res.json({ success: true, balance_info: balanceInfo });
+  } catch (err) {
+    const detail = err.response?.data?.error?.message || err.message;
+    res.status(400).json({ error: detail });
+  }
+}
+
 async function getAccountInsights(req, res) {
   try {
     const account = await adsRepo.getActiveAdAccount(req.orgId);
     if (!account) return res.status(404).json({ error: 'No connected Ad Account. Please connect one from WA Numbers → Ads Accounts.' });
 
     const { date_preset = 'last_30d' } = req.query;
-    const insights = await metaAds.getAccountInsights(account.access_token, account.act_id, { date_preset, time_increment: 1 });
+    const [insights, balanceInfo] = await Promise.all([
+      metaAds.getAccountInsights(account.access_token, account.act_id, { date_preset, time_increment: 1 }),
+      metaAds.getAdAccount(account.access_token, account.act_id).catch(() => null),
+    ]);
 
     // Aggregate totals
     const totals = insights.reduce((acc, row) => ({
@@ -383,7 +399,12 @@ async function getAccountInsights(req, res) {
     totals.cpc = totals.clicks      ? (totals.spend / totals.clicks).toFixed(2)               : '0.00';
     totals.cpm = totals.impressions ? ((totals.spend / totals.impressions) * 1000).toFixed(2) : '0.00';
 
-    res.json({ insights, totals, account: { id: account.id, name: account.name, currency: account.currency } });
+    res.json({
+      insights,
+      totals,
+      balance_info: balanceInfo,
+      account: { id: account.id, name: account.name, currency: account.currency, act_id: account.act_id }
+    });
   } catch (err) {
     const detail = err.response?.data?.error?.message || err.message;
     console.error('[getAccountInsights]', detail);
@@ -673,7 +694,7 @@ module.exports = {
   listCampaigns, createCampaign, updateCampaign, deleteCampaign, publishCampaign,
   listAdSets, createAdSet, updateAdSet, deleteAdSet,
   listAds, updateAd, deleteAd,
-  getCampaignInsights, getAccountInsights,
+  getCampaignInsights, getAccountInsights, getAccountBalance,
   listAudiences, createCustomAudience, createLookalikeAudience, createSavedAudience, deleteAudience, searchInterests,
 };
 

@@ -36,8 +36,10 @@ router.patch('/ads/:id',         authenticate, ctrl.updateAd);
 router.delete('/ads/:id',        authenticate, ctrl.deleteAd);
 
 
-// ── Insights Dashboard ────────────────────────────────────────────
+// ── Insights Dashboard & Balance ─────────────────────────────────
 router.get('/insights',          authenticate, ctrl.getAccountInsights);
+router.get('/balance',           authenticate, ctrl.getAccountBalance);
+
 
 // ── Audiences ────────────────────────────────────────────────────
 router.get('/audiences',             authenticate, ctrl.listAudiences);
