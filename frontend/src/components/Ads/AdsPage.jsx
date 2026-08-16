@@ -686,25 +686,54 @@ function CreateAdTab({ account, accounts, onSuccess }) {
                 )}
               </div>
 
-              {wabaAccounts.length > 0 && (
-                <div className="form-group">
-                  <label className="form-label">Destination WhatsApp Number *</label>
+              {/* Destination WhatsApp Number */}
+              <div className="form-group">
+                <label className="form-label">Destination WhatsApp Number *</label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   <select
                     className="form-input"
-                    value={form.whatsapp_number}
-                    onChange={e => setField('whatsapp_number', e.target.value)}
+                    value={form.whatsapp_source || 'page'}
+                    onChange={e => {
+                      const src = e.target.value;
+                      setField('whatsapp_source', src);
+                      if (src === 'page') {
+                        const curPage = pages.find(p => p.id === form.page_id);
+                        setField('whatsapp_number', curPage?.whatsapp_number || '');
+                      } else if (src === 'waba' && wabaAccounts.length > 0) {
+                        setField('whatsapp_number', wabaAccounts[0].display_number || '');
+                      } else if (src === 'custom') {
+                        setField('whatsapp_number', '');
+                      }
+                    }}
                   >
+                    {pages.find(p => p.id === form.page_id)?.whatsapp_number && (
+                      <option value="page">
+                        📄 Facebook Page's Linked Number ({pages.find(p => p.id === form.page_id)?.whatsapp_number})
+                      </option>
+                    )}
                     {wabaAccounts.map(w => (
-                      <option key={w.id} value={w.display_number}>
-                        💬 {w.display_name ? `${w.display_name} (${w.display_number})` : w.display_number}
+                      <option key={w.id} value={`waba_${w.id}`}>
+                        📱 Connected WABA: {w.display_name ? `${w.display_name} (${w.display_number})` : w.display_number}
                       </option>
                     ))}
+                    <option value="custom">✏️ Enter Custom WhatsApp Number...</option>
                   </select>
-                  <div style={{ fontSize: 11, color: 'var(--clr-primary)', marginTop: 4 }}>
-                    Incoming leads from this ad will automatically land in your CRM & Live Chat.
-                  </div>
+
+                  {(form.whatsapp_source === 'custom' || (!pages.find(p => p.id === form.page_id)?.whatsapp_number && wabaAccounts.length === 0)) && (
+                    <input
+                      className="form-input"
+                      placeholder="e.g. 7814051127 or +91 78140 51127"
+                      value={form.whatsapp_number}
+                      onChange={e => setField('whatsapp_number', e.target.value)}
+                      required
+                    />
+                  )}
                 </div>
-              )}
+                <div style={{ fontSize: 11, color: 'var(--clr-primary)', marginTop: 4 }}>
+                  Incoming leads from this ad will automatically land in your CRM & Live Chat.
+                </div>
+              </div>
+
 
               <div className="form-group">
                 <label className="form-label">Ad Headline *</label>

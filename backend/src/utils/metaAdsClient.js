@@ -301,7 +301,7 @@ async function listPages(accessToken) {
   const r = await client(accessToken).get('/me/accounts', {
     params: {
       access_token: accessToken,
-      fields: 'id,name,category,picture',
+      fields: 'id,name,category,picture,phone,whatsapp_number',
     },
   });
   return r.data?.data || [];
