@@ -81,8 +81,13 @@ async function createCampaign(accessToken, actId, { name, objective, status = 'P
     special_ad_categories,
   };
 
-  if (daily_budget) payload.daily_budget = daily_budget;       // in paise (INR = cents * 100)
-  if (lifetime_budget) payload.lifetime_budget = lifetime_budget;
+  if (daily_budget) {
+    payload.daily_budget = daily_budget;
+  } else if (lifetime_budget) {
+    payload.lifetime_budget = lifetime_budget;
+  } else {
+    payload.is_adset_budget_sharing_enabled = false;
+  }
 
   const r = await client(accessToken).post(`/${actId}/campaigns`, payload);
   return r.data; // { id: '...' }
