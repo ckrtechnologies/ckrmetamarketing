@@ -151,6 +151,18 @@ export default function ContactsPage() {
     finally { setImporting(false); e.target.value = ''; }
   }
 
+  function downloadSampleCSV() {
+    const csvContent = "name,phone,tags,city\nRahul Sharma,919876543210,\"vip,lead\",Delhi\nPriya Patel,7982296878,\"customer,ecomm\",Mumbai\nDr. Amit Verma,+919811122233,\"clinic,doctor\",Bangalore\nSneha Gupta,9822334455,school,Pune\n";
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', 'contacts_sample_template.csv');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+
   return (
     <div className="contacts-page fade-in">
       <div className="page-header">
@@ -159,6 +171,9 @@ export default function ContactsPage() {
           <p>{total.toLocaleString()} contacts {activeGroup ? 'in this group' : 'total'}</p>
         </div>
         <div className="page-header__actions">
+          <button className="btn btn--ghost btn--sm" onClick={downloadSampleCSV} title="Download ready-to-use CSV template">
+            📥 Sample CSV
+          </button>
           <input ref={fileRef} type="file" accept=".csv" style={{ display: 'none' }} onChange={handleFileImport} />
           <button className="btn btn--secondary btn--sm" onClick={() => fileRef.current?.click()} disabled={importing}>
             {importing ? '⏳ Importing...' : '📤 Import CSV'}

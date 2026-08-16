@@ -51,6 +51,8 @@ app.use('/api/', rateLimit({
 app.use('/api/auth',        authRoutes);
 app.use('/api/v2/waba',     wabaRoutes);
 app.use('/api/v2/webhook',   webhookRoutes);
+app.use('/api/webhook',      webhookRoutes);
+app.use('/webhook',          webhookRoutes);
 app.use('/api/v2/contacts',  contactRoutes);
 app.use('/api/v2/campaigns', campaignRoutes);
 app.use('/api/v2/chat',       chatRoutes);
