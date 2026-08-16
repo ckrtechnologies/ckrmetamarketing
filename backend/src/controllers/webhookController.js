@@ -77,18 +77,33 @@ async function handleInboundMessage(value, msg) {
   console.log(`[webhook:inbound] +${from} → "${body.substring(0, 60)}" [${msgType}]`);
 
   // Find org by phone_number_id → waba_accounts table
-  const { data: wabaRows } = await orgRepo.supabasePublic()
-    .from('waba_accounts')
-    .select('id, org_id')
-    .eq('phone_number_id', wabaPhoneId)
-    .maybeSingle();
+  let wabaRow = null;
+  if (wabaPhoneId) {
+    const { data } = await orgRepo.supabasePublic()
+      .from('waba_accounts')
+      .select('id, org_id')
+      .eq('phone_number_id', String(wabaPhoneId))
+      .maybeSingle();
+    wabaRow = data;
+  }
 
-  if (!wabaRows) {
-    console.warn(`[webhook] No org found for phone_number_id: ${wabaPhoneId}`);
+  // Fallback: If not matched by phone_number_id, match by active WABA or first WABA in DB
+  if (!wabaRow) {
+    const { data: fallbackWaba } = await orgRepo.supabasePublic()
+      .from('waba_accounts')
+      .select('id, org_id')
+      .order('is_active', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    wabaRow = fallbackWaba;
+  }
+
+  if (!wabaRow) {
+    console.warn(`[webhook] No WABA account found in system for inbound message`);
     return;
   }
 
-  const { id: wabaDbId, org_id } = wabaRows;
+  const { id: wabaDbId, org_id } = wabaRow;
 
   // Calculate 24h reply window from this message
   const windowExpires = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
