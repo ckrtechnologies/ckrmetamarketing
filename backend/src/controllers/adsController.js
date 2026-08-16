@@ -268,21 +268,21 @@ async function updateAdSet(req, res) {
     if (req.body.daily_budget !== undefined && req.body.daily_budget !== '') {
       updates.daily_budget = Math.round(parseFloat(req.body.daily_budget) * 100);
     }
-    if (req.body.lifetime_budget !== undefined && req.body.lifetime_budget !== '') {
-      updates.lifetime_budget = Math.round(parseFloat(req.body.lifetime_budget) * 100);
-    }
+    if (req.body.optimization_goal) updates.optimization_goal = req.body.optimization_goal;
+    if (req.body.start_time) updates.start_time = req.body.start_time;
+    if (req.body.end_time) updates.end_time = req.body.end_time;
 
     // Full Targeting updates
     if (req.body.targeting) {
       const t = req.body.targeting;
       updates.targeting = {
-        geo_locations: t.countries ? { countries: t.countries } : (t.geo_locations || { countries: ['IN'] }),
+        geo_locations: t.geo_locations || (t.countries ? { countries: t.countries } : { countries: ['IN'] }),
         age_min: parseInt(t.age_min) || 18,
         age_max: parseInt(t.age_max) || 65,
         genders: t.genders || [0],
         ...(t.device_platforms?.length ? { device_platforms: t.device_platforms } : {}),
         ...(t.publisher_platforms?.length ? { publisher_platforms: t.publisher_platforms } : {}),
-        ...(t.interests?.length ? {
+        ...(t.flexible_spec?.length ? { flexible_spec: t.flexible_spec } : t.interests?.length ? {
           flexible_spec: [{ interests: t.interests.map(i => ({ id: i.id, name: i.name })) }],
         } : {}),
       };

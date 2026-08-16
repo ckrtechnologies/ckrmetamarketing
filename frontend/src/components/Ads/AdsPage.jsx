@@ -801,7 +801,7 @@ function CampaignsTab({ account, onRefresh }) {
                                             <div style={{ textAlign: 'right' }}>
                                               <span style={{ color: 'var(--clr-text-3)', fontSize: 10, display: 'block', textTransform: 'uppercase' }}>Daily Budget</span>
                                               <strong style={{ color: 'var(--clr-primary)', fontFamily: 'monospace', fontSize: 14 }}>
-                                                {adset.daily_budget ? formatCurrency(adset.daily_budget, account.currency) + '/day' : '—'}
+                                                {adset.daily_budget ? formatBudgetFromPaise(adset.daily_budget, account.currency) + '/day' : '—'}
                                               </strong>
                                             </div>
 
@@ -1071,6 +1071,12 @@ function EditEntityModal({ target, currency, onClose, onSaved }) {
       : ''
   );
 
+  // AdSet Optimization & Schedule
+  const [optGoal, setOptGoal] = useState(item.optimization_goal || 'CONVERSATIONS');
+  const [destType, setDestType] = useState(item.destination_type || 'WHATSAPP');
+  const [startTime, setStartTime] = useState(item.start_time ? item.start_time.slice(0, 16) : '');
+  const [endTime, setEndTime] = useState(item.end_time ? item.end_time.slice(0, 16) : '');
+
   // AdSet Targeting State
   const initialTargeting = item.targeting || {};
   const [country, setCountry] = useState(initialTargeting.geo_locations?.countries?.[0] || 'IN');
@@ -1078,14 +1084,20 @@ function EditEntityModal({ target, currency, onClose, onSaved }) {
   const [ageMax, setAgeMax] = useState(initialTargeting.age_max || 65);
   const [gender, setGender] = useState(initialTargeting.genders?.[0] !== undefined ? initialTargeting.genders[0] : 0);
   
-  // Extract initial interests
+  // Devices & Placements
+  const [devices, setDevices] = useState(initialTargeting.device_platforms || ['mobile', 'desktop']);
+  const [publishers, setPublishers] = useState(initialTargeting.publisher_platforms || ['facebook', 'instagram', 'messenger', 'audience_network']);
+
+  // Extract initial interests / behaviors / job titles
   const extractedInterests = [];
   if (initialTargeting.flexible_spec) {
     initialTargeting.flexible_spec.forEach(spec => {
-      if (spec.interests) spec.interests.forEach(i => extractedInterests.push(i));
+      if (spec.interests) spec.interests.forEach(i => extractedInterests.push({ ...i, category: 'Interest' }));
+      if (spec.behaviors) spec.behaviors.forEach(b => extractedInterests.push({ ...b, category: 'Behavior' }));
+      if (spec.work_positions) spec.work_positions.forEach(w => extractedInterests.push({ ...w, category: 'Job Title' }));
     });
   } else if (initialTargeting.interests) {
-    initialTargeting.interests.forEach(i => extractedInterests.push(i));
+    initialTargeting.interests.forEach(i => extractedInterests.push({ ...i, category: 'Interest' }));
   }
   const [interests, setInterests] = useState(extractedInterests);
   const [interestQuery, setInterestQuery] = useState('');
@@ -1097,8 +1109,12 @@ function EditEntityModal({ target, currency, onClose, onSaved }) {
   const [headline, setHeadline] = useState(initialCr.title || initialCr.object_story_spec?.link_data?.name || initialCr.name || '');
   const [body, setBody] = useState(initialCr.body || initialCr.object_story_spec?.link_data?.message || '');
   const [description, setDescription] = useState(initialCr.object_story_spec?.link_data?.description || '');
-  const [cta, setCta] = useState(initialCr.call_to_action_type || 'WHATSAPP_MESSAGE');
-  const [whatsappNumber, setWhatsappNumber] = useState(initialCr.object_story_spec?.link_data?.call_to_action?.value?.whatsapp_number || '');
+  const [cta, setCta] = useState(initialCr.call_to_action_type || initialCr.object_story_spec?.link_data?.call_to_action?.type || 'WHATSAPP_MESSAGE');
+  const [whatsappNumber, setWhatsappNumber] = useState(
+    initialCr.object_story_spec?.link_data?.call_to_action?.value?.whatsapp_number ||
+    item.promoted_object?.whatsapp_phone_number ||
+    '917042603342'
+  );
   const [imageFile, setImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState(initialCr.image_url || initialCr.thumbnail_url || null);
 
@@ -1129,6 +1145,14 @@ function EditEntityModal({ target, currency, onClose, onSaved }) {
     reader.readAsDataURL(file);
   }
 
+  function toggleDevice(d) {
+    setDevices(prev => prev.includes(d) ? prev.filter(x => x !== d) : [...prev, d]);
+  }
+
+  function togglePublisher(p) {
+    setPublishers(prev => prev.includes(p) ? prev.filter(x => x !== p) : [...prev, p]);
+  }
+
   async function handleSave(e) {
     e.preventDefault();
     if (!name.trim()) { setError('Name is required'); return; }
@@ -1144,11 +1168,16 @@ function EditEntityModal({ target, currency, onClose, onSaved }) {
           name: name.trim(),
           status,
           daily_budget: budget || undefined,
+          optimization_goal: optGoal,
+          start_time: startTime ? new Date(startTime).toISOString() : undefined,
+          end_time: endTime ? new Date(endTime).toISOString() : undefined,
           targeting: {
             countries: [country],
             age_min: parseInt(ageMin) || 18,
             age_max: parseInt(ageMax) || 65,
             genders: [parseInt(gender)],
+            device_platforms: devices.length > 0 ? devices : ['mobile', 'desktop'],
+            publisher_platforms: publishers.length > 0 ? publishers : ['facebook', 'instagram'],
             interests: interests.map(i => ({ id: i.id, name: i.name })),
           }
         };
@@ -1176,63 +1205,102 @@ function EditEntityModal({ target, currency, onClose, onSaved }) {
 
   return (
     <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal-box" style={{ maxWidth: type === 'ad' || type === 'adset' ? 620 : 440 }}>
+      <div className="modal-box" style={{ maxWidth: type === 'ad' || type === 'adset' ? 700 : 460, maxHeight: '90vh', overflowY: 'auto' }}>
         <div className="modal-title">
-          ✏️ Edit {type === 'campaign' ? 'Campaign' : type === 'adset' ? 'Ad Set & Audience' : 'Ad & Creative'}
+          ✏️ Edit {type === 'campaign' ? 'Campaign' : type === 'adset' ? 'Ad Set & Targeting' : 'Ad & Creative'}
         </div>
         <div style={{ fontSize: 11, color: 'var(--clr-text-3)', marginTop: -14, marginBottom: 16 }}>
-          ID: <code>{item.id}</code>
+          Meta ID: <code>{item.id}</code>
         </div>
 
-        {error && <div className="alert alert--error" style={{ marginBottom: 12 }}>{error}</div>}
+        {error && <div className="alert alert--error" style={{ marginBottom: 14 }}>{error}</div>}
 
-        <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          {/* General Fields */}
-          <div className="form-group">
-            <label className="form-label">{type === 'ad' ? 'Ad Name' : type === 'adset' ? 'Ad Set Name' : 'Campaign Name'} *</label>
-            <input
-              className="form-input"
-              value={name}
-              onChange={e => setName(e.target.value)}
-              required
-            />
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: (type === 'adset' || (type === 'campaign' && item.budget_type === 'daily')) ? '1fr 1fr' : '1fr', gap: 12 }}>
-            <div className="form-group">
-              <label className="form-label">Status</label>
-              <select className="form-input" value={status} onChange={e => setStatus(e.target.value)}>
-                <option value="ACTIVE">🟢 Active</option>
-                <option value="PAUSED">⏸ Paused</option>
-              </select>
+        <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {/* Section 1: Basic Config */}
+          <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--clr-border)', borderRadius: 8, padding: 14, display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--clr-text)', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: 6 }}>
+              📋 Basic Information & Budget
             </div>
 
-            {(type === 'adset' || (type === 'campaign' && item.budget_type === 'daily')) && (
+            <div className="form-group">
+              <label className="form-label">{type === 'ad' ? 'Ad Name' : type === 'adset' ? 'Ad Set Name' : 'Campaign Name'} *</label>
+              <input
+                className="form-input"
+                value={name}
+                onChange={e => setName(e.target.value)}
+                required
+              />
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: (type === 'adset' || (type === 'campaign' && item.budget_type === 'daily')) ? '1fr 1fr' : '1fr', gap: 12 }}>
               <div className="form-group">
-                <label className="form-label">Daily Budget ({currency || 'INR'})</label>
-                <input
-                  className="form-input"
-                  type="number"
-                  step="1"
-                  min="50"
-                  placeholder="e.g. 500"
-                  value={budget}
-                  onChange={e => setBudget(e.target.value)}
-                />
+                <label className="form-label">Status</label>
+                <select className="form-input" value={status} onChange={e => setStatus(e.target.value)}>
+                  <option value="ACTIVE">🟢 Active</option>
+                  <option value="PAUSED">⏸ Paused</option>
+                </select>
+              </div>
+
+              {(type === 'adset' || (type === 'campaign' && item.budget_type === 'daily')) && (
+                <div className="form-group">
+                  <label className="form-label">Daily Budget ({currency || 'INR'})</label>
+                  <div style={{ position: 'relative' }}>
+                    <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--clr-text-3)', fontSize: 13, fontWeight: 700 }}>
+                      {currency === 'INR' ? '₹' : '$'}
+                    </span>
+                    <input
+                      className="form-input"
+                      style={{ paddingLeft: 24 }}
+                      type="number"
+                      step="1"
+                      min="50"
+                      placeholder="e.g. 500"
+                      value={budget}
+                      onChange={e => setBudget(e.target.value)}
+                    />
+                  </div>
+                  <span style={{ fontSize: 10, color: 'var(--clr-text-3)', marginTop: 2, display: 'block' }}>
+                    Current spend: {budget ? `₹${parseFloat(budget).toFixed(0)}/day` : '—'}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {type === 'adset' && (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div className="form-group">
+                  <label className="form-label">Optimization Goal</label>
+                  <select className="form-input" value={optGoal} onChange={e => setOptGoal(e.target.value)}>
+                    <option value="CONVERSATIONS">💬 Conversations (WhatsApp / Messenger)</option>
+                    <option value="LINK_CLICKS">🌐 Link Clicks (Website Traffic)</option>
+                    <option value="LEAD_GENERATION">📋 Lead Generation</option>
+                    <option value="IMPRESSIONS">👁️ Impressions</option>
+                    <option value="REACH">📢 Reach</option>
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Destination</label>
+                  <select className="form-input" value={destType} onChange={e => setDestType(e.target.value)}>
+                    <option value="WHATSAPP">🟢 Click-to-WhatsApp</option>
+                    <option value="MESSENGER">🔵 Messenger</option>
+                    <option value="WEBSITE">🌐 Website URL</option>
+                  </select>
+                </div>
               </div>
             )}
           </div>
 
           {/* ════ AD SET TARGETING EDIT CONTROLS ════ */}
           {type === 'adset' && (
-            <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--clr-border)', borderRadius: 8, padding: 14, display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--clr-border)', borderRadius: 8, padding: 14, display: 'flex', flexDirection: 'column', gap: 14 }}>
               <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--clr-text)', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: 6 }}>
-                🎯 Audience & Targeting Controls
+                🎯 Demographics & Location Targeting
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
                 <div className="form-group">
-                  <label className="form-label">Country</label>
+                  <label className="form-label">Target Country</label>
                   <select className="form-input" value={country} onChange={e => setCountry(e.target.value)}>
                     {COUNTRIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
                   </select>
@@ -1260,25 +1328,25 @@ function EditEntityModal({ target, currency, onClose, onSaved }) {
 
               {/* Interests Picker */}
               <div className="form-group" style={{ position: 'relative' }}>
-                <label className="form-label">🎯 Detailed Interests Targeting</label>
+                <label className="form-label">🎯 Detailed Interests, Behaviors & Job Titles</label>
                 <input
                   className="form-input"
-                  placeholder="Search interests e.g. Healthcare, Software, Education..."
+                  placeholder="Search Meta interests e.g. Healthcare, Software, Education, CEO..."
                   value={interestQuery}
                   onChange={e => handleSearchInterests(e.target.value)}
                 />
                 {interestSuggestions.length > 0 && (
                   <div style={{
-                    position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 10,
+                    position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 20,
                     background: 'var(--clr-surface)', border: '1px solid var(--clr-border)',
-                    borderRadius: 8, maxHeight: 150, overflowY: 'auto', boxShadow: '0 8px 24px rgba(0,0,0,.4)'
+                    borderRadius: 8, maxHeight: 160, overflowY: 'auto', boxShadow: '0 8px 24px rgba(0,0,0,.5)'
                   }}>
                     {interestSuggestions.map(item => (
                       <div
                         key={item.id}
                         onClick={() => {
                           if (!interests.some(i => i.id === item.id)) {
-                            setInterests(prev => [...prev, { id: item.id, name: item.name }]);
+                            setInterests(prev => [...prev, { id: item.id, name: item.name, category: item.topic || 'Interest' }]);
                           }
                           setInterestQuery('');
                           setInterestSuggestions([]);
@@ -1294,15 +1362,42 @@ function EditEntityModal({ target, currency, onClose, onSaved }) {
                 )}
 
                 {interests.length > 0 && (
-                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 10 }}>
                     {interests.map(item => (
-                      <span key={item.id} className="badge badge--green" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '3px 8px', fontSize: 11 }}>
-                        🎯 {item.name}
+                      <span key={item.id} className="badge badge--green" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 9px', fontSize: 11 }}>
+                        🎯 {item.name} {item.category && <span style={{ opacity: 0.7, fontSize: 10 }}>({item.category})</span>}
                         <button type="button" onClick={() => setInterests(interests.filter(i => i.id !== item.id))} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', fontSize: 11, padding: 0 }}>✕</button>
                       </span>
                     ))}
                   </div>
                 )}
+              </div>
+
+              {/* Placements & Devices */}
+              <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: 10 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--clr-text-2)', marginBottom: 8, textTransform: 'uppercase' }}>
+                  📱 Devices & Platforms
+                </div>
+
+                <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 10 }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: 'pointer' }}>
+                    <input type="checkbox" checked={devices.includes('mobile')} onChange={() => toggleDevice('mobile')} />
+                    📱 Mobile Devices
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: 'pointer' }}>
+                    <input type="checkbox" checked={devices.includes('desktop')} onChange={() => toggleDevice('desktop')} />
+                    💻 Desktop Computers
+                  </label>
+                </div>
+
+                <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+                  {['facebook', 'instagram', 'messenger', 'audience_network'].map(p => (
+                    <label key={p} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, cursor: 'pointer', textTransform: 'capitalize' }}>
+                      <input type="checkbox" checked={publishers.includes(p)} onChange={() => togglePublisher(p)} />
+                      {p.replace('_', ' ')}
+                    </label>
+                  ))}
+                </div>
               </div>
             </div>
           )}
@@ -1315,7 +1410,7 @@ function EditEntityModal({ target, currency, onClose, onSaved }) {
               </div>
 
               <div className="form-group">
-                <label className="form-label">Headline (Short & catchy)</label>
+                <label className="form-label">Headline (Catchy bold title)</label>
                 <input
                   className="form-input"
                   placeholder="e.g. Launch Your Mobile App in 15 Days"
@@ -1325,10 +1420,10 @@ function EditEntityModal({ target, currency, onClose, onSaved }) {
               </div>
 
               <div className="form-group">
-                <label className="form-label">Primary Text (Ad Body Copy)</label>
+                <label className="form-label">Primary Text (Ad Message Body)</label>
                 <textarea
                   className="form-input"
-                  rows={4}
+                  rows={5}
                   placeholder="Write your ad copy/message..."
                   value={body}
                   onChange={e => setBody(e.target.value)}
@@ -1337,10 +1432,10 @@ function EditEntityModal({ target, currency, onClose, onSaved }) {
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div className="form-group">
-                  <label className="form-label">Description (Optional)</label>
+                  <label className="form-label">Description (Optional sub-text)</label>
                   <input
                     className="form-input"
-                    placeholder="e.g. Chat with our experts"
+                    placeholder="e.g. Chat with our specialists"
                     value={description}
                     onChange={e => setDescription(e.target.value)}
                   />
@@ -1353,6 +1448,7 @@ function EditEntityModal({ target, currency, onClose, onSaved }) {
                     <option value="LEARN_MORE">📖 Learn More</option>
                     <option value="GET_QUOTE">💰 Get Quote</option>
                     <option value="CONTACT_US">📞 Contact Us</option>
+                    <option value="SIGN_UP">✍️ Sign Up</option>
                   </select>
                 </div>
               </div>
@@ -1369,9 +1465,9 @@ function EditEntityModal({ target, currency, onClose, onSaved }) {
 
               <div className="form-group">
                 <label className="form-label">Replace Creative Image (Optional)</label>
-                <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
                   {imagePreview && (
-                    <img src={imagePreview} alt="Preview" style={{ width: 60, height: 60, borderRadius: 6, objectFit: 'cover', border: '1px solid var(--clr-border)' }} />
+                    <img src={imagePreview} alt="Preview" style={{ width: 70, height: 70, borderRadius: 6, objectFit: 'cover', border: '1px solid var(--clr-border)' }} />
                   )}
                   <input type="file" accept="image/*" onChange={handleImageChange} style={{ fontSize: 12 }} />
                 </div>
