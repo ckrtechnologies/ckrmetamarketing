@@ -126,8 +126,7 @@ async function createAdSet(accessToken, actId, {
       } : {}),
     },
     promoted_object: {
-      ...(page_id ? { page_id } : {}),
-      ...(whatsapp_phone_number ? { whatsapp_phone_number } : {}),
+      page_id: page_id,
     },
     status,
   };

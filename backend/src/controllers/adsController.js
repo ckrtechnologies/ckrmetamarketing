@@ -592,5 +592,6 @@ module.exports = {
   listAdSets, createAdSet,
   listAds,
   getCampaignInsights, getAccountInsights,
-  listAudiences, searchInterests,
+  listAudiences, createCustomAudience, createLookalikeAudience, createSavedAudience, deleteAudience, searchInterests,
 };
+
