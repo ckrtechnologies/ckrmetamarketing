@@ -1,18 +1,42 @@
-import React from 'react';
+import React, { useState } from 'react';
 import Sidebar from './Sidebar.jsx';
 import './Layout.css';
 
 export default function Layout({ children, user, org, title }) {
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
   return (
     <div className="app-layout">
-      <Sidebar user={user} org={org} />
+      {/* Mobile backdrop */}
+      {sidebarOpen && (
+        <div
+          className="sidebar-backdrop"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
+      <Sidebar
+        user={user}
+        org={org}
+        isOpen={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
+      />
+
       <div className="app-main">
-        {title && (
-          <header className="topbar">
-            <span className="topbar__title">{title}</span>
-            <div className="topbar__actions" />
-          </header>
-        )}
+        <header className="topbar">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <button
+              className="mobile-menu-btn"
+              onClick={() => setSidebarOpen(prev => !prev)}
+              aria-label="Toggle navigation"
+            >
+              ☰
+            </button>
+            <span className="topbar__title">{title || 'CKR Meta Marketing'}</span>
+          </div>
+          <div className="topbar__actions" />
+        </header>
+
         <main className="app-content fade-in">
           {children}
         </main>
@@ -20,3 +44,4 @@ export default function Layout({ children, user, org, title }) {
     </div>
   );
 }
+

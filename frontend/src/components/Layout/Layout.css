@@ -11,6 +11,7 @@
   z-index: 100;
   padding: 0;
   overflow: hidden;
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .sidebar__logo {
@@ -29,6 +30,18 @@
   line-height: 1;
 }
 .sidebar__logo-sub { font-size: 10.5px; color: var(--clr-primary); font-weight: 600; letter-spacing: .04em; }
+
+.sidebar-close-btn {
+  display: none;
+  background: transparent;
+  border: none;
+  color: var(--clr-text-2);
+  font-size: 18px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+.sidebar-close-btn:hover { color: var(--clr-text); background: rgba(255,255,255,.06); }
 
 .sidebar__org-badge {
   margin: 10px 14px;
@@ -100,6 +113,7 @@
 .app-layout {
   display: flex;
   min-height: 100vh;
+  width: 100%;
 }
 .app-main {
   flex: 1;
@@ -107,12 +121,15 @@
   display: flex;
   flex-direction: column;
   min-height: 100vh;
+  min-width: 0;
+  width: calc(100% - var(--sidebar-w));
 }
 .app-content {
   flex: 1;
-  padding: 28px 32px;
-  max-width: 1400px;
+  padding: 24px clamp(16px, 2.5vw, 40px);
   width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 /* ── Top Bar ─────────────────────────────────────────────────── */
@@ -123,7 +140,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 32px;
+  padding: 0 clamp(16px, 2.5vw, 40px);
   position: sticky;
   top: 0;
   z-index: 50;
@@ -136,6 +153,26 @@
 }
 .topbar__actions { display: flex; align-items: center; gap: 10px; }
 
+.mobile-menu-btn {
+  display: none;
+  background: transparent;
+  border: 1px solid var(--clr-border);
+  border-radius: var(--radius-sm);
+  color: var(--clr-text);
+  font-size: 18px;
+  padding: 4px 9px;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.sidebar-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  backdrop-filter: blur(2px);
+  z-index: 99;
+}
+
 /* ── Page Header ─────────────────────────────────────────────── */
 .page-header {
   display: flex;
@@ -144,6 +181,7 @@
   margin-bottom: 24px;
   gap: 16px;
   flex-wrap: wrap;
+  width: 100%;
 }
 .page-header h1 {
   font-family: var(--font-display);
@@ -153,7 +191,7 @@
   margin-bottom: 3px;
 }
 .page-header p { font-size: 13px; color: var(--clr-text-2); }
-.page-header__actions { display: flex; gap: 10px; align-items: center; }
+.page-header__actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 
 /* ── Sidebar Nav Badge ───────────────────────────────────────── */
 .sidebar__nav-badge {
@@ -170,3 +208,36 @@
   flex-shrink: 0;
   animation: pulse-dot 3s infinite;
 }
+
+/* ── Responsive Breakpoints ──────────────────────────────────── */
+@media (max-width: 900px) {
+  .mobile-menu-btn { display: inline-flex; }
+  .sidebar-close-btn { display: inline-flex; }
+
+  .sidebar {
+    transform: translateX(-100%);
+    box-shadow: var(--shadow-lg);
+  }
+  .sidebar--open {
+    transform: translateX(0);
+  }
+
+  .app-main {
+    margin-left: 0;
+    width: 100%;
+  }
+
+  .app-content {
+    padding: 16px;
+  }
+
+  .topbar {
+    padding: 0 16px;
+  }
+}
+
+@media (max-width: 600px) {
+  .page-header { flex-direction: column; align-items: stretch; }
+  .page-header__actions { width: 100%; justify-content: flex-start; }
+}
+

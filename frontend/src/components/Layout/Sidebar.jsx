@@ -15,7 +15,7 @@ const NAV_ITEMS = [
   { path: '/settings',   icon: '⚙️',  label: 'Settings' },
 ];
 
-export default function Sidebar({ user, org }) {
+export default function Sidebar({ user, org, isOpen, onClose }) {
   const navigate = useNavigate();
   const [unread, setUnread] = useState(0);
 
@@ -35,13 +35,16 @@ export default function Sidebar({ user, org }) {
   }
 
   return (
-    <aside className="sidebar">
+    <aside className={`sidebar${isOpen ? ' sidebar--open' : ''}`}>
       <div className="sidebar__logo">
         <span className="sidebar__logo-icon">🟢</span>
-        <div>
+        <div style={{ flex: 1 }}>
           <div className="sidebar__logo-brand">CKR Meta</div>
           <div className="sidebar__logo-sub">Marketing</div>
         </div>
+        {onClose && (
+          <button className="sidebar-close-btn" onClick={onClose} aria-label="Close menu">✕</button>
+        )}
       </div>
 
       {org && (
@@ -56,6 +59,7 @@ export default function Sidebar({ user, org }) {
           <NavLink
             key={item.path}
             to={item.path}
+            onClick={() => onClose && onClose()}
             className={({ isActive }) => `sidebar__nav-item${isActive ? ' sidebar__nav-item--active' : ''}`}
           >
             <span className="sidebar__nav-icon">{item.icon}</span>
