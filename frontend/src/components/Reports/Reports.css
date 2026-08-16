@@ -1,0 +1,143 @@
+/* ── Reports Page ─────────────────────────────────────────────── */
+.reports-grid {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 16px;
+}
+
+/* Column spans */
+.col-12 { grid-column: span 12; }
+.col-8  { grid-column: span 8; }
+.col-6  { grid-column: span 6; }
+.col-4  { grid-column: span 4; }
+.col-3  { grid-column: span 3; }
+
+@media (max-width: 1100px) {
+  .col-8, .col-6 { grid-column: span 12; }
+  .col-4, .col-3 { grid-column: span 6; }
+}
+@media (max-width: 720px) {
+  .col-4, .col-3 { grid-column: span 12; }
+}
+
+/* ── Chart Card ───────────────────────────────────────────────── */
+.chart-card {
+  background: var(--clr-surface);
+  border: 1px solid var(--clr-border);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.chart-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.chart-card__title {
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--clr-text);
+}
+.chart-card__sub { font-size: 11.5px; color: var(--clr-text-3); margin-top: 2px; }
+.chart-card__badge { font-size: 11px; padding: 3px 9px; }
+
+/* ── Funnel ───────────────────────────────────────────────────── */
+.funnel-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.funnel-row {
+  display: grid;
+  grid-template-columns: 90px 1fr 60px;
+  align-items: center;
+  gap: 10px;
+}
+.funnel-label { font-size: 12px; font-weight: 600; color: var(--clr-text-2); text-align: right; }
+.funnel-bar-wrap { background: rgba(255,255,255,0.05); border-radius: 20px; height: 10px; overflow: hidden; }
+.funnel-bar { height: 100%; border-radius: 20px; transition: width 0.8s cubic-bezier(0.34,1.56,0.64,1); }
+.funnel-value { font-size: 12.5px; font-weight: 700; color: var(--clr-text); }
+
+/* ── Campaign Performance Table ──────────────────────────────── */
+.perf-table { width: 100%; border-collapse: collapse; }
+.perf-table th, .perf-table td {
+  padding: 9px 12px;
+  text-align: left;
+  font-size: 12.5px;
+  border-bottom: 1px solid var(--clr-border);
+}
+.perf-table th { font-size: 11px; font-weight: 700; color: var(--clr-text-3); text-transform: uppercase; letter-spacing: .05em; }
+.perf-table tr:last-child td { border-bottom: none; }
+.perf-table tbody tr:hover { background: rgba(255,255,255,.02); }
+
+/* ── Rate Bar (inline) ──────────────────────────────────────── */
+.rate-bar {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.rate-bar__track {
+  flex: 1;
+  height: 5px;
+  background: rgba(255,255,255,0.06);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.rate-bar__fill { height: 100%; border-radius: 4px; transition: width 0.6s ease; }
+.rate-bar__label { font-size: 11.5px; font-weight: 700; min-width: 38px; }
+
+/* ── Template Cards ──────────────────────────────────────────── */
+.template-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.tpl-row {
+  display: grid;
+  grid-template-columns: 1fr 90px 90px 80px;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--clr-border);
+}
+.tpl-row:last-child { border-bottom: none; }
+.tpl-name { font-size: 12.5px; font-weight: 600; color: var(--clr-text); font-family: monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tpl-stat { font-size: 12px; font-weight: 700; color: var(--clr-text); }
+.tpl-rate { font-size: 11.5px; font-weight: 700; }
+
+/* ── Day range picker ────────────────────────────────────────── */
+.day-picker { display: flex; gap: 6px; }
+.day-picker-btn {
+  padding: 4px 10px;
+  border-radius: 20px;
+  border: 1px solid var(--clr-border-2);
+  background: transparent;
+  color: var(--clr-text-2);
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.day-picker-btn:hover { border-color: var(--clr-primary); color: var(--clr-primary); }
+.day-picker-btn--active { background: var(--clr-primary-bg); color: var(--clr-primary) !important; border-color: var(--clr-primary-bd) !important; }
+
+/* ── Stat Card upgrades ──────────────────────────────────────── */
+.stat-card__trend {
+  display: flex; align-items: center; gap: 5px;
+  font-size: 11.5px; font-weight: 600; margin-top: 2px;
+}
+.trend-up   { color: var(--clr-success); }
+.trend-down { color: var(--clr-danger); }
+
+/* ── Loading Skeleton ────────────────────────────────────────── */
+.skeleton {
+  background: linear-gradient(90deg, rgba(255,255,255,.04) 25%, rgba(255,255,255,.08) 50%, rgba(255,255,255,.04) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s infinite;
+  border-radius: 8px;
+}
+@keyframes shimmer { to { background-position: -200% 0; } }

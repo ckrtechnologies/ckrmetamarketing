@@ -9,12 +9,13 @@ import WABAPage      from './components/WhatsApp/WABAPage.jsx';
 import ContactsPage  from './components/Contacts/ContactsPage.jsx';
 import CampaignList  from './components/Campaign/CampaignList.jsx';
 import ChatPage      from './components/Chat/ChatPage.jsx';
+import ReportsPage   from './components/Reports/ReportsPage.jsx';
 
 const Placeholder = ({ name }) => (
   <div className="card fade-in" style={{ textAlign: 'center', padding: '60px 20px' }}>
     <div style={{ fontSize: 48, marginBottom: 12 }}>🚧</div>
     <h2 style={{ fontFamily: 'var(--font-display)', color: 'var(--clr-text)', marginBottom: 8 }}>{name}</h2>
-    <p style={{ color: 'var(--clr-text-2)' }}>Coming in the next phase of development.</p>
+    <p style={{ color: 'var(--clr-text-2)' }}>Coming soon.</p>
   </div>
 );
 
@@ -77,14 +78,14 @@ export default function App() {
             <ChatPage user={user} />
           </ProtectedRoute>
         } />
+        <Route path="/reports" element={
+          <ProtectedRoute user={user} org={org} title="Analytics">
+            <ReportsPage />
+          </ProtectedRoute>
+        } />
         <Route path="/waba" element={
           <ProtectedRoute user={user} org={org} title="WhatsApp Numbers">
             <WABAPage />
-          </ProtectedRoute>
-        } />
-        <Route path="/reports" element={
-          <ProtectedRoute user={user} org={org} title="Reports">
-            <Placeholder name="Reports — Phase 4" />
           </ProtectedRoute>
         } />
         <Route path="/settings" element={
