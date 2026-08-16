@@ -23,14 +23,34 @@ async function getCampaign(req, res) {
 
 async function createCampaign(req, res) {
   try {
-    const { name, waba_id, template_name, template_lang, scheduled_at, group_id, recipients } = req.body;
+    const { name, waba_id, template_name, template_lang = 'en', group_id, recipients, variables, template_variables, scheduled_at } = req.body;
     if (!name || !waba_id || !template_name) {
-      return res.status(400).json({ error: 'name, waba_id, and template_name are required' });
+      return res.status(400).json({ error: 'name, waba_id and template_name are required' });
     }
 
     const campaign = await campaignRepo.createCampaign({
       org_id: req.orgId, waba_id, name, template_name, template_lang, scheduled_at, created_by: req.user.id,
     });
+
+    const varTemplate = variables || template_variables || recipients?.variableMap || {};
+
+    // Helper to resolve variables for a specific contact
+    function resolveContactVariables(contact) {
+      if (!varTemplate || Object.keys(varTemplate).length === 0) return null;
+      const resolved = {};
+      for (const [key, val] of Object.entries(varTemplate)) {
+        let strVal = String(val || '');
+        if (strVal === '{{name}}' || strVal === 'name' || strVal === '{{Name}}') {
+          strVal = contact?.name || 'Customer';
+        } else if (strVal === '{{phone}}' || strVal === 'phone') {
+          strVal = contact?.phone || '';
+        } else if (contact?.metadata && contact.metadata[strVal.replace(/[{}]/g, '')]) {
+          strVal = contact.metadata[strVal.replace(/[{}]/g, '')];
+        }
+        resolved[key] = strVal;
+      }
+      return resolved;
+    }
 
     // Attach recipients from a group or explicit list
     let recipientRows = [];
@@ -39,13 +59,13 @@ async function createCampaign(req, res) {
       recipientRows = contacts.map(c => ({
         contact_id: c.id,
         phone: require('../utils/phone').normalizePhoneNumber(c.phone),
-        variables: recipients?.variableMap || null,
+        variables: resolveContactVariables(c),
       }));
     } else if (recipients?.phones?.length) {
       recipientRows = recipients.phones.map(phone => ({
         contact_id: null,
         phone: require('../utils/phone').normalizePhoneNumber(phone),
-        variables: null,
+        variables: resolveContactVariables({ phone }),
       }));
     }
 
