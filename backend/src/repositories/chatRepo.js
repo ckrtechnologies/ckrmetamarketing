@@ -162,8 +162,20 @@ async function getUnreadCount(org_id) {
   return data.reduce((sum, c) => sum + (c.unread_count || 0), 0);
 }
 
+async function getNewMessagesSince(conversation_id, since) {
+  const { data, error } = await supabase
+    .from('messages')
+    .select('*')
+    .eq('conversation_id', conversation_id)
+    .gt('sent_at', since)
+    .order('sent_at', { ascending: true });
+  if (error) throw error;
+  return data || [];
+}
+
 module.exports = {
   upsertConversation, getConversations, getConversationById, findConversationByPhone,
   markConversationRead, closeConversation, assignConversation,
-  addMessage, getMessages, updateMessageStatus, getUnreadCount,
+  addMessage, getMessages, updateMessageStatus, getUnreadCount, getNewMessagesSince,
 };
+

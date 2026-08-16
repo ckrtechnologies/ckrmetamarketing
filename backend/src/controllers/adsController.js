@@ -503,15 +503,14 @@ async function publishCampaign(req, res) {
     const wabaAccounts = await orgRepo.getWabaAccounts(req.orgId);
     const whatsappNumber = wabaAccounts[0]?.display_number?.replace(/\D/g, '') || req.body.whatsapp_number;
 
-    // Step 1: Create Campaign
+    // Step 1: Create Campaign shell
     const campaignResult = await metaAds.createCampaign(account.access_token, account.act_id, {
       name: campaign_name,
       objective,
       status,
       special_ad_categories: [],
-      daily_budget:    daily_budget    ? budgetToPaise(daily_budget)    : undefined,
-      lifetime_budget: lifetime_budget ? budgetToPaise(lifetime_budget) : undefined,
     });
+
 
     // Step 2: Upload image (if provided)
     let image_hash = null;
