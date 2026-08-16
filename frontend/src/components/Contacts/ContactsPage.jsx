@@ -572,7 +572,7 @@ export default function ContactsPage() {
                             <button
                               className="btn btn--secondary btn--sm"
                               style={{ padding: '3px 8px', fontSize: 11 }}
-                              onClick={() => navigate('/chat')}
+                              onClick={() => navigate(`/chat?phone=${encodeURIComponent(c.phone)}&name=${encodeURIComponent(c.name || '')}`)}
                               title="Send WhatsApp Message"
                             >
                               💬 Chat

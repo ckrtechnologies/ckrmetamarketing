@@ -112,6 +112,94 @@ async function sendReply(req, res) {
   }
 }
 
+// POST /api/v2/chat/start
+async function startConversation(req, res) {
+  try {
+    const { customer_phone, customer_name, waba_id } = req.body;
+    if (!customer_phone) return res.status(400).json({ error: 'customer_phone is required' });
+
+    const cleanPhone = require('../utils/phone').normalizePhoneNumber(customer_phone);
+
+    const wabaAccounts = await orgRepo.getWabaAccounts(req.orgId);
+    const targetWaba = (waba_id ? wabaAccounts.find(a => a.id === waba_id) : null) ||
+      (await orgRepo.getActiveWaba(req.orgId)) ||
+      wabaAccounts[0];
+
+    if (!targetWaba) return res.status(404).json({ error: 'No WhatsApp number connected' });
+
+    const conv = await chatRepo.upsertConversation({
+      org_id: req.orgId,
+      waba_id: targetWaba.id,
+      customer_phone: cleanPhone,
+      customer_name: customer_name || null,
+      last_message: 'Chat opened',
+    });
+
+    res.json({ conversation: conv });
+  } catch (err) {
+    console.error('[startConversation]', err);
+    res.status(500).json({ error: err.message });
+  }
+}
+
+// POST /api/v2/chat/conversations/:id/send-template
+async function sendTemplateInChat(req, res) {
+  try {
+    const { template_name, template_lang = 'en', variables = {} } = req.body;
+    if (!template_name) return res.status(400).json({ error: 'template_name is required' });
+
+    const conv = await chatRepo.getConversationById(req.orgId, req.params.id);
+    const wabaAccounts = await orgRepo.getWabaAccounts(req.orgId);
+    const convWaba = conv.waba_id
+      ? wabaAccounts.find(a => a.id === conv.waba_id) || wabaAccounts[0]
+      : wabaAccounts[0];
+
+    if (!convWaba) return res.status(404).json({ error: 'WABA not found' });
+
+    const components = [];
+    if (variables && Object.keys(variables).length > 0) {
+      const params = Object.values(variables).map(v => ({ type: 'text', text: String(v) }));
+      components.push({ type: 'body', parameters: params });
+    }
+
+    const result = await sendTemplate(
+      convWaba.phone_number_id,
+      convWaba.access_token,
+      conv.customer_phone,
+      template_name,
+      template_lang,
+      components
+    );
+
+    if (!result.success) {
+      return res.status(400).json({ error: result.error || 'Failed to send template', detail: result.raw });
+    }
+
+    const wamid = result.data?.messages?.[0]?.id;
+
+    const msg = await chatRepo.addMessage({
+      conversation_id: conv.id,
+      direction: 'outbound',
+      type: 'template',
+      body: `[Template: ${template_name}]`,
+      wamid,
+      status: 'sent',
+    });
+
+    await chatRepo.upsertConversation({
+      org_id: req.orgId,
+      waba_id: convWaba.id,
+      customer_phone: conv.customer_phone,
+      last_message: `You: [Template: ${template_name}]`,
+    });
+
+    res.json({ message: msg, wamid });
+  } catch (err) {
+    console.error('[sendTemplateInChat]', err);
+    res.status(500).json({ error: err.message });
+  }
+}
+
 // GET /api/v2/chat/unread — total unread badge count
 async function getUnreadCount(req, res) {
   try {
@@ -120,15 +208,17 @@ async function getUnreadCount(req, res) {
   } catch (err) { res.status(500).json({ error: 0 }); }
 }
 
-// GET /api/v2/chat/conversations/:id/poll — lightweight poll for new messages
+// GET /api/v2/chat/conversations/:id/poll?since=ISOString
 async function pollMessages(req, res) {
   try {
-    const { since } = req.query; // ISO timestamp
-    let query = chatRepo.getMessages(req.params.id, { limit: 50 });
-    const { messages } = await query;
-    const filtered = since ? messages.filter(m => new Date(m.sent_at) > new Date(since)) : messages;
-    res.json({ messages: filtered });
+    const { since } = req.query;
+    if (!since) return res.status(400).json({ error: 'since timestamp required' });
+    const messages = await chatRepo.getNewMessagesSince(req.params.id, since);
+    res.json({ messages });
   } catch (err) { res.status(500).json({ error: err.message }); }
 }
 
-module.exports = { listConversations, getConversation, closeConversation, assignConversation, getMessages, sendReply, getUnreadCount, pollMessages };
+module.exports = {
+  listConversations, getConversation, closeConversation, assignConversation,
+  getMessages, sendReply, sendTemplateInChat, startConversation, getUnreadCount, pollMessages,
+};

@@ -127,6 +127,12 @@ async function updateContact(org_id, id, updates) {
 }
 
 async function deleteContact(org_id, id) {
+  // Disassociate from campaign_recipients first to satisfy foreign key constraint
+  await supabase
+    .from('campaign_recipients')
+    .update({ contact_id: null })
+    .eq('contact_id', id);
+
   const { error } = await supabase
     .from('contacts')
     .delete()
@@ -139,6 +145,13 @@ async function deleteContact(org_id, id) {
 
 async function bulkDeleteContacts(org_id, ids) {
   if (!ids || !ids.length) return { count: 0 };
+
+  // Disassociate from campaign_recipients first to satisfy foreign key constraint
+  await supabase
+    .from('campaign_recipients')
+    .update({ contact_id: null })
+    .in('contact_id', ids);
+
   const { error, count } = await supabase
     .from('contacts')
     .delete({ count: 'exact' })
