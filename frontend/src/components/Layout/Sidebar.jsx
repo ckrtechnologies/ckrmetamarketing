@@ -1,20 +1,32 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { logout } from '../../api/auth.js';
+import { getUnreadCount } from '../../api/chat.js';
 import './Layout.css';
 
 const NAV_ITEMS = [
   { path: '/dashboard',  icon: '📊', label: 'Dashboard' },
   { path: '/campaigns',  icon: '📣', label: 'Campaigns' },
   { path: '/contacts',   icon: '👥', label: 'Contacts' },
-  { path: '/chat',       icon: '💬', label: 'Live Chat' },
+  { path: '/chat',       icon: '💬', label: 'Live Chat', badge: true },
   { path: '/reports',    icon: '📈', label: 'Reports' },
-  { path: '/waba',       icon: '📱', label: 'WhatsApp Numbers' },
+  { path: '/waba',       icon: '📱', label: 'WA Numbers' },
   { path: '/settings',   icon: '⚙️',  label: 'Settings' },
 ];
 
 export default function Sidebar({ user, org }) {
   const navigate = useNavigate();
+  const [unread, setUnread] = useState(0);
+
+  useEffect(() => {
+    // Poll unread count every 10s
+    function loadUnread() {
+      getUnreadCount().then(d => setUnread(d.unread || 0)).catch(() => {});
+    }
+    loadUnread();
+    const t = setInterval(loadUnread, 10000);
+    return () => clearInterval(t);
+  }, []);
 
   function handleLogout() {
     logout();
@@ -47,6 +59,9 @@ export default function Sidebar({ user, org }) {
           >
             <span className="sidebar__nav-icon">{item.icon}</span>
             <span className="sidebar__nav-label">{item.label}</span>
+            {item.badge && unread > 0 && (
+              <span className="sidebar__nav-badge">{unread > 99 ? '99+' : unread}</span>
+            )}
           </NavLink>
         ))}
       </nav>

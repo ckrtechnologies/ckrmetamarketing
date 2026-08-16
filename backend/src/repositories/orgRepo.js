@@ -136,3 +136,9 @@ module.exports = {
   createUser, getUserByEmail, getUserById, getOrgMembers,
   getWabaAccounts, upsertWabaAccount, setActiveWaba, getActiveWaba, deleteWabaAccount,
 };
+
+// ── Utility: expose supabase instance for webhook org lookup ──
+function supabasePublic() {
+  return require('../utils/supabase');
+}
+module.exports.supabasePublic = supabasePublic;

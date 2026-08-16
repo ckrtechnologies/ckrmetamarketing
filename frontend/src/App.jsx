@@ -8,6 +8,7 @@ import Dashboard     from './components/Dashboard/Dashboard.jsx';
 import WABAPage      from './components/WhatsApp/WABAPage.jsx';
 import ContactsPage  from './components/Contacts/ContactsPage.jsx';
 import CampaignList  from './components/Campaign/CampaignList.jsx';
+import ChatPage      from './components/Chat/ChatPage.jsx';
 
 const Placeholder = ({ name }) => (
   <div className="card fade-in" style={{ textAlign: 'center', padding: '60px 20px' }}>
@@ -71,14 +72,14 @@ export default function App() {
             <ContactsPage />
           </ProtectedRoute>
         } />
+        <Route path="/chat" element={
+          <ProtectedRoute user={user} org={org} title="Live Chat">
+            <ChatPage user={user} />
+          </ProtectedRoute>
+        } />
         <Route path="/waba" element={
           <ProtectedRoute user={user} org={org} title="WhatsApp Numbers">
             <WABAPage />
-          </ProtectedRoute>
-        } />
-        <Route path="/chat" element={
-          <ProtectedRoute user={user} org={org} title="Live Chat">
-            <Placeholder name="Live Chat — Phase 3" />
           </ProtectedRoute>
         } />
         <Route path="/reports" element={

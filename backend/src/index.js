@@ -11,6 +11,7 @@ const wabaRoutes    = require('./routes/waba');
 const webhookRoutes  = require('./routes/webhook');
 const contactRoutes  = require('./routes/contacts');
 const campaignRoutes = require('./routes/campaigns');
+const chatRoutes     = require('./routes/chat');
 
 const app  = express();
 const PORT = process.env.PORT || 5001;
@@ -51,6 +52,7 @@ app.use('/api/v2/waba',     wabaRoutes);
 app.use('/api/v2/webhook',   webhookRoutes);
 app.use('/api/v2/contacts',  contactRoutes);
 app.use('/api/v2/campaigns', campaignRoutes);
+app.use('/api/v2/chat',      chatRoutes);
 
 // ── Health check ───────────────────────────────────────────────────
 app.get('/api/health', (req, res) => {
