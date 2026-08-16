@@ -6,6 +6,7 @@ import {
   listAudiences, searchInterests, listPages,
   publishCampaign,
 } from '../../api/ads.js';
+import { listWabaAccounts } from '../../api/waba.js';
 import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, Legend,
@@ -428,10 +429,11 @@ function CampaignsTab({ account, onRefresh }) {
 // ═══════════════════════════════════════════════════════════════
 
 function CreateAdTab({ account, accounts, onSuccess }) {
-  const [step,      setStep]      = useState(1);
-  const [pages,     setPages]     = useState([]);
-  const [saving,    setSaving]    = useState(false);
-  const [error,     setError]     = useState('');
+  const [step,         setStep]         = useState(1);
+  const [pages,        setPages]        = useState([]);
+  const [wabaAccounts, setWabaAccounts] = useState([]);
+  const [saving,       setSaving]       = useState(false);
+  const [error,        setError]        = useState('');
 
   // Form state
   const [form, setForm] = useState({
@@ -447,6 +449,7 @@ function CreateAdTab({ account, accounts, onSuccess }) {
     genders:           [0],
     // Creative
     page_id:           '',
+    whatsapp_number:   '',
     headline:          '',
     body:              '',
     description:       '',
@@ -454,7 +457,10 @@ function CreateAdTab({ account, accounts, onSuccess }) {
   });
 
   useEffect(() => {
-    if (account) loadPages();
+    if (account) {
+      loadPages();
+      loadWabaNumbers();
+    }
   }, [account]);
 
   async function loadPages() {
@@ -462,6 +468,17 @@ function CreateAdTab({ account, accounts, onSuccess }) {
       const data = await listPages();
       setPages(data.pages || []);
       if (data.pages?.length) setForm(f => ({ ...f, page_id: data.pages[0].id }));
+    } catch (e) {}
+  }
+
+  async function loadWabaNumbers() {
+    try {
+      const data = await listWabaAccounts();
+      const accounts = data.accounts || [];
+      setWabaAccounts(accounts);
+      if (accounts.length) {
+        setForm(f => ({ ...f, whatsapp_number: accounts[0].display_number || '' }));
+      }
     } catch (e) {}
   }
 
@@ -668,6 +685,26 @@ function CreateAdTab({ account, accounts, onSuccess }) {
                   </div>
                 )}
               </div>
+
+              {wabaAccounts.length > 0 && (
+                <div className="form-group">
+                  <label className="form-label">Destination WhatsApp Number *</label>
+                  <select
+                    className="form-input"
+                    value={form.whatsapp_number}
+                    onChange={e => setField('whatsapp_number', e.target.value)}
+                  >
+                    {wabaAccounts.map(w => (
+                      <option key={w.id} value={w.display_number}>
+                        💬 {w.display_name ? `${w.display_name} (${w.display_number})` : w.display_number}
+                      </option>
+                    ))}
+                  </select>
+                  <div style={{ fontSize: 11, color: 'var(--clr-primary)', marginTop: 4 }}>
+                    Incoming leads from this ad will automatically land in your CRM & Live Chat.
+                  </div>
+                </div>
+              )}
 
               <div className="form-group">
                 <label className="form-label">Ad Headline *</label>

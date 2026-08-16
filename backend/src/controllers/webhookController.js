@@ -108,6 +108,37 @@ async function handleInboundMessage(value, msg) {
   // Calculate 24h reply window from this message
   const windowExpires = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
 
+  // ── Auto-save lead directly into CRM Contacts ────────────────
+  try {
+    const cleanPhone = require('../utils/phone').normalizePhoneNumber(from);
+    const { data: existingContact } = await orgRepo.supabasePublic()
+      .from('contacts')
+      .select('id, name, tags')
+      .eq('org_id', org_id)
+      .eq('phone', cleanPhone)
+      .maybeSingle();
+
+    if (!existingContact) {
+      await orgRepo.supabasePublic()
+        .from('contacts')
+        .insert({
+          org_id,
+          phone: cleanPhone,
+          name: customerName || null,
+          tags: ['ad-lead', 'whatsapp'],
+          metadata: { source: 'click_to_whatsapp_ad', first_message: body },
+        });
+      console.log(`[webhook:crm] 🎯 New Lead captured in CRM: +${cleanPhone} (${customerName || 'No Name'})`);
+    } else if (customerName && !existingContact.name) {
+      await orgRepo.supabasePublic()
+        .from('contacts')
+        .update({ name: customerName })
+        .eq('id', existingContact.id);
+    }
+  } catch (crmErr) {
+    console.error('[webhook:auto-lead-crm error]', crmErr.message);
+  }
+
   // Upsert conversation
   const conv = await upsertConversation({
     org_id,
@@ -127,6 +158,7 @@ async function handleInboundMessage(value, msg) {
     wamid,
     status: 'delivered',
   });
+
 }
 
 // ── Delivery Status Handler ───────────────────────────────────
