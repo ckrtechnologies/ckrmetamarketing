@@ -315,29 +315,41 @@ async function deleteAd(accessToken, adId) {
 
 // ── Insights ──────────────────────────────────────────────────
 
-async function getCampaignInsights(accessToken, campaignId, { date_preset = 'last_30d', time_increment } = {}) {
+async function getCampaignInsights(accessToken, campaignId, { date_preset, since, until, time_increment } = {}) {
   const params = {
     access_token: accessToken,
     fields: 'impressions,clicks,spend,reach,ctr,cpc,cpm,actions,action_values,frequency,date_start,date_stop',
-    date_preset,
   };
-  if (time_increment) params.time_increment = time_increment; // 1 for daily
+  if (since && until) {
+    params.time_range = JSON.stringify({ since, until });
+  } else if (date_preset) {
+    params.date_preset = date_preset;
+  } else {
+    params.date_preset = 'last_30d';
+  }
+  if (time_increment) params.time_increment = time_increment;
 
   const r = await client(accessToken).get(`/${campaignId}/insights`, { params });
   return r.data?.data || [];
 }
 
-async function getAccountInsights(accessToken, actId, { date_preset = 'last_30d', time_increment = 1 } = {}) {
-  const r = await client(accessToken).get(`/${actId}/insights`, {
-    params: {
-      access_token: accessToken,
-      fields: 'impressions,clicks,spend,reach,ctr,cpc,cpm,actions,date_start,date_stop',
-      date_preset,
-      time_increment,
-      level: 'campaign',
-      limit: 100,
-    },
-  });
+async function getAccountInsights(accessToken, actId, { date_preset, since, until, time_increment = 1 } = {}) {
+  const params = {
+    access_token: accessToken,
+    fields: 'impressions,clicks,spend,reach,ctr,cpc,cpm,actions,date_start,date_stop',
+    time_increment,
+    level: 'campaign',
+    limit: 500,
+  };
+  if (since && until) {
+    params.time_range = JSON.stringify({ since, until });
+  } else if (date_preset) {
+    params.date_preset = date_preset;
+  } else {
+    params.date_preset = 'last_30d';
+  }
+
+  const r = await client(accessToken).get(`/${actId}/insights`, { params });
   return r.data?.data || [];
 }
 

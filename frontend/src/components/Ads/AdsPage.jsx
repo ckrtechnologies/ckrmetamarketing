@@ -26,10 +26,15 @@ const OBJECTIVES = [
 ];
 
 const DATE_PRESETS = [
-  { value: 'last_7d',  label: 'Last 7 Days' },
-  { value: 'last_14d', label: 'Last 14 Days' },
-  { value: 'last_30d', label: 'Last 30 Days' },
-  { value: 'last_90d', label: 'Last 90 Days' },
+  { value: 'today',       label: 'Today' },
+  { value: 'yesterday',   label: 'Yesterday' },
+  { value: 'last_7d',     label: 'Last 7 Days' },
+  { value: 'last_14d',    label: 'Last 14 Days' },
+  { value: 'last_30d',    label: 'Last 30 Days' },
+  { value: 'last_90d',    label: 'Last 90 Days' },
+  { value: 'this_month',  label: 'This Month' },
+  { value: 'last_month',  label: 'Last Month' },
+  { value: 'maximum',     label: 'Lifetime' },
 ];
 
 const COUNTRIES = [
@@ -43,8 +48,9 @@ const COUNTRIES = [
 ];
 
 function formatCurrency(n, currency = 'INR') {
+  if (n === null || n === undefined || isNaN(n)) return '—';
   const sym = currency === 'INR' ? '₹' : '$';
-  return `${sym}${parseFloat(n || 0).toFixed(2)}`;
+  return `${sym}${parseFloat(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 function formatBudgetFromPaise(paise, currency = 'INR') {
@@ -147,7 +153,7 @@ export default function AdsPage() {
 
             {accountBalance?.spend_cap_remaining_num !== null && accountBalance?.spend_cap_remaining_num !== undefined && (
               <div className="ads-account-chip" style={{ background: 'rgba(24, 119, 242, 0.15)', color: '#1877f2', borderColor: 'rgba(24, 119, 242, 0.35)', fontWeight: 700 }}>
-                🛑 Spend Cap Left: <strong>{formatCurrency(accountBalance.spend_cap_remaining_num * 100, activeAccount.currency)}</strong>
+                🛑 Spend Cap Left: <strong>{formatCurrency(accountBalance.spend_cap_remaining_num, activeAccount.currency)}</strong>
               </div>
             )}
 
@@ -215,16 +221,41 @@ function OverviewTab({ account, accountBalance }) {
   const [totals,      setTotals]      = useState({});
   const [balanceInfo, setBalanceInfo] = useState(accountBalance || null);
   const [datePreset,  setDatePreset]  = useState('last_30d');
+  const [isCustom,    setIsCustom]    = useState(false);
+  const [customSince, setCustomSince] = useState(new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10));
+  const [customUntil, setCustomUntil] = useState(new Date().toISOString().slice(0, 10));
   const [loading,     setLoading]     = useState(false);
   const [error,       setError]       = useState('');
 
-  useEffect(() => { if (account) loadInsights(); }, [account, datePreset]);
+  useEffect(() => {
+    if (account) {
+      if (isCustom) {
+        loadCustomInsights();
+      } else {
+        loadInsights();
+      }
+    }
+  }, [account, datePreset, isCustom]);
+
   useEffect(() => { if (accountBalance) setBalanceInfo(accountBalance); }, [accountBalance]);
 
   async function loadInsights() {
     setLoading(true); setError('');
     try {
       const data = await getAccountInsights({ date_preset: datePreset });
+      setInsights(data.insights || []);
+      setTotals(data.totals || {});
+      if (data.balance_info) setBalanceInfo(data.balance_info);
+    } catch (e) {
+      setError(e.message);
+    } finally { setLoading(false); }
+  }
+
+  async function loadCustomInsights() {
+    if (!customSince || !customUntil) return;
+    setLoading(true); setError('');
+    try {
+      const data = await getAccountInsights({ since: customSince, until: customUntil });
       setInsights(data.insights || []);
       setTotals(data.totals || {});
       if (data.balance_info) setBalanceInfo(data.balance_info);
@@ -255,8 +286,8 @@ function OverviewTab({ account, accountBalance }) {
 
     ...(balanceInfo?.spend_cap_remaining_num !== null && balanceInfo?.spend_cap_remaining_num !== undefined ? [{
       label: 'Spend Cap Remaining',
-      value: formatCurrency(balanceInfo.spend_cap_remaining_num * 100, account.currency),
-      sub: `of ${formatCurrency((balanceInfo.spend_cap_num || 0) * 100, account.currency)} limit`,
+      value: formatCurrency(balanceInfo.spend_cap_remaining_num, account.currency),
+      sub: `of ${formatCurrency((balanceInfo.spend_cap_num || 0), account.currency)} limit`,
       gradient: 'linear-gradient(135deg, rgba(24,119,242,.15), transparent)'
     }] : []),
 
@@ -269,21 +300,53 @@ function OverviewTab({ account, accountBalance }) {
     { label: 'CPM',           value: formatCurrency(totals.cpm, account.currency),    sub: 'Cost per 1000 views', gradient: 'linear-gradient(135deg,rgba(255,200,0,.08),transparent)' },
   ];
 
-
   return (
     <div>
-      {/* Date Filter */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
-        {DATE_PRESETS.map(d => (
+      {/* Date Filter & Custom Date Range */}
+      <div style={{ display: 'flex', gap: 10, marginBottom: 20, flexWrap: 'wrap', alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          {DATE_PRESETS.map(d => (
+            <button
+              key={d.value}
+              className={`chat-filter-btn${!isCustom && datePreset === d.value ? ' chat-filter-btn--active' : ''}`}
+              onClick={() => { setIsCustom(false); setDatePreset(d.value); }}
+            >
+              {d.label}
+            </button>
+          ))}
           <button
-            key={d.value}
-            className={`chat-filter-btn${datePreset === d.value ? ' chat-filter-btn--active' : ''}`}
-            onClick={() => setDatePreset(d.value)}
+            className={`chat-filter-btn${isCustom ? ' chat-filter-btn--active' : ''}`}
+            onClick={() => setIsCustom(true)}
           >
-            {d.label}
+            📅 Custom Range
           </button>
-        ))}
-        <button className="btn btn--ghost btn--sm" onClick={loadInsights} disabled={loading}>
+        </div>
+
+        {isCustom && (
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', background: 'var(--clr-surface)', border: '1px solid var(--clr-border)', padding: '4px 10px', borderRadius: 8 }}>
+            <span style={{ fontSize: 11, color: 'var(--clr-text-3)', fontWeight: 600 }}>From:</span>
+            <input
+              type="date"
+              className="form-input"
+              style={{ padding: '3px 6px', fontSize: 12, height: 'auto', width: 'auto' }}
+              value={customSince}
+              onChange={e => setCustomSince(e.target.value)}
+            />
+            <span style={{ fontSize: 11, color: 'var(--clr-text-3)', fontWeight: 600 }}>To:</span>
+            <input
+              type="date"
+              className="form-input"
+              style={{ padding: '3px 6px', fontSize: 12, height: 'auto', width: 'auto' }}
+              value={customUntil}
+              onChange={e => setCustomUntil(e.target.value)}
+            />
+            <button className="btn btn--primary btn--sm" onClick={loadCustomInsights} disabled={loading} style={{ fontSize: 11, padding: '3px 10px' }}>
+              {loading ? '⏳ Loading...' : 'Apply'}
+            </button>
+          </div>
+        )}
+
+        <button className="btn btn--ghost btn--sm" onClick={isCustom ? loadCustomInsights : loadInsights} disabled={loading}>
           {loading ? '⏳' : '↻'} Refresh
         </button>
       </div>
@@ -2655,10 +2718,10 @@ function AccountsTab({ accounts, onRefresh, onSwitchAccount, accountBalance }) {
               <div style={{ background: 'var(--clr-surface)', padding: '12px 16px', borderRadius: 8, border: '1px solid var(--clr-border)' }}>
                 <div style={{ fontSize: 11, color: 'var(--clr-text-3)', fontWeight: 700, textTransform: 'uppercase' }}>🛑 Spend Cap Remaining</div>
                 <div style={{ fontSize: 22, fontWeight: 900, color: '#1877f2', fontFamily: 'var(--font-display)', marginTop: 4 }}>
-                  {formatCurrency(accountBalance.spend_cap_remaining_num * 100, activeAcc.currency)}
+                  {formatCurrency(accountBalance.spend_cap_remaining_num, activeAcc.currency)}
                 </div>
                 <div style={{ fontSize: 11, color: 'var(--clr-text-3)', marginTop: 2 }}>
-                  Cap limit: {formatCurrency((accountBalance.spend_cap_num || 0) * 100, activeAcc.currency)}
+                  Cap limit: {formatCurrency((balanceInfo?.spend_cap_num || accountBalance.spend_cap_num || 0), activeAcc.currency)}
                 </div>
               </div>
             )}
@@ -2666,7 +2729,7 @@ function AccountsTab({ accounts, onRefresh, onSwitchAccount, accountBalance }) {
             <div style={{ background: 'var(--clr-surface)', padding: '12px 16px', borderRadius: 8, border: '1px solid var(--clr-border)' }}>
               <div style={{ fontSize: 11, color: 'var(--clr-text-3)', fontWeight: 700, textTransform: 'uppercase' }}>💸 Total Lifetime Spent</div>
               <div style={{ fontSize: 22, fontWeight: 900, color: 'var(--clr-text)', fontFamily: 'var(--font-display)', marginTop: 4 }}>
-                {formatCurrency((accountBalance.amount_spent_num || 0) * 100, activeAcc.currency)}
+                {formatCurrency((accountBalance.amount_spent_num || 0), activeAcc.currency)}
               </div>
               <div style={{ fontSize: 11, color: 'var(--clr-text-3)', marginTop: 2 }}>Across all campaigns</div>
             </div>

@@ -399,11 +399,11 @@ async function getCampaignInsights(req, res) {
     if (!account) return res.status(404).json({ error: 'No connected Ad Account' });
 
     const campaignId = req.params.id;
-    const { date_preset = 'last_30d' } = req.query;
+    const { date_preset, since, until } = req.query;
 
     const [dailyData, totalData] = await Promise.all([
-      metaAds.getCampaignInsights(account.access_token, campaignId, { date_preset, time_increment: 1 }),
-      metaAds.getCampaignInsights(account.access_token, campaignId, { date_preset }),
+      metaAds.getCampaignInsights(account.access_token, campaignId, { date_preset, since, until, time_increment: 1 }),
+      metaAds.getCampaignInsights(account.access_token, campaignId, { date_preset, since, until }),
     ]);
 
     // Cache daily data in Supabase
@@ -434,9 +434,9 @@ async function getAccountInsights(req, res) {
     const account = await adsRepo.getActiveAdAccount(req.orgId);
     if (!account) return res.status(404).json({ error: 'No connected Ad Account. Please connect one from WA Numbers → Ads Accounts.' });
 
-    const { date_preset = 'last_30d' } = req.query;
+    const { date_preset, since, until } = req.query;
     const [insights, balanceInfo] = await Promise.all([
-      metaAds.getAccountInsights(account.access_token, account.act_id, { date_preset, time_increment: 1 }),
+      metaAds.getAccountInsights(account.access_token, account.act_id, { date_preset, since, until, time_increment: 1 }),
       metaAds.getAdAccount(account.access_token, account.act_id).catch(() => null),
     ]);
 
