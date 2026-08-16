@@ -31,5 +31,10 @@ export const listAds           = (params = {})    => apiCall('GET',    '/v2/ads/
 export const getAccountInsights = (params = {})   => apiCall('GET',    '/v2/ads/insights?' + new URLSearchParams(params).toString());
 
 // ── Audiences ────────────────────────────────────────────────────
-export const listAudiences     = ()               => apiCall('GET',    '/v2/ads/audiences');
-export const searchInterests   = (q)             => apiCall('GET',    `/v2/ads/interests?q=${encodeURIComponent(q)}`);
+export const listAudiences            = ()               => apiCall('GET',    '/v2/ads/audiences');
+export const createCustomAudience     = (data)           => apiCall('POST',   '/v2/ads/audiences/custom', data);
+export const createLookalikeAudience  = (data)           => apiCall('POST',   '/v2/ads/audiences/lookalike', data);
+export const createSavedAudience      = (data)           => apiCall('POST',   '/v2/ads/audiences/saved', data);
+export const deleteAudience           = (id)             => apiCall('DELETE', `/v2/ads/audiences/${id}`);
+export const searchInterests          = (q)             => apiCall('GET',    `/v2/ads/interests?q=${encodeURIComponent(q)}`);
+

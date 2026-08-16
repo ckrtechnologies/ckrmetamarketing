@@ -3,7 +3,8 @@ import {
   listAdAccounts, connectAdAccount, disconnectAdAccount, fetchMetaAccounts,
   listCampaigns, createCampaign, updateCampaign, deleteCampaign,
   getAccountInsights, getCampaignInsights,
-  listAudiences, searchInterests, listPages,
+  listAudiences, createCustomAudience, createLookalikeAudience, createSavedAudience, deleteAudience, searchInterests,
+  listPages,
   publishCampaign,
 } from '../../api/ads.js';
 import { listWabaAccounts } from '../../api/waba.js';
@@ -35,6 +36,8 @@ const COUNTRIES = [
   { value: 'GB', label: '🇬🇧 United Kingdom' },
   { value: 'AE', label: '🇦🇪 UAE' },
   { value: 'SG', label: '🇸🇬 Singapore' },
+  { value: 'CA', label: '🇨🇦 Canada' },
+  { value: 'AU', label: '🇦🇺 Australia' },
 ];
 
 function formatCurrency(n, currency = 'INR') {
@@ -435,6 +438,11 @@ function CreateAdTab({ account, accounts, onSuccess }) {
   const [saving,       setSaving]       = useState(false);
   const [error,        setError]        = useState('');
 
+  // Interest search state
+  const [interestQuery,       setInterestQuery]       = useState('');
+  const [interestSuggestions, setInterestSuggestions] = useState([]);
+  const [searchingInterests,  setSearchingInterests]  = useState(false);
+
   // Form state
   const [form, setForm] = useState({
     account_id:        '',
@@ -447,8 +455,10 @@ function CreateAdTab({ account, accounts, onSuccess }) {
     age_min:           18,
     age_max:           65,
     genders:           [0],
+    interests:         [],
     // Creative
     page_id:           '',
+    whatsapp_source:   'page',
     whatsapp_number:   '',
     headline:          '',
     body:              '',
@@ -467,23 +477,48 @@ function CreateAdTab({ account, accounts, onSuccess }) {
     try {
       const data = await listPages();
       setPages(data.pages || []);
-      if (data.pages?.length) setForm(f => ({ ...f, page_id: data.pages[0].id }));
+      if (data.pages?.length) {
+        setForm(f => ({
+          ...f,
+          page_id: data.pages[0].id,
+          whatsapp_number: data.pages[0].whatsapp_number || '',
+        }));
+      }
     } catch (e) {}
   }
 
   async function loadWabaNumbers() {
     try {
       const data = await listWabaAccounts();
-      const accounts = data.accounts || [];
-      setWabaAccounts(accounts);
-      if (accounts.length) {
-        setForm(f => ({ ...f, whatsapp_number: accounts[0].display_number || '' }));
-      }
+      setWabaAccounts(data.accounts || []);
     } catch (e) {}
   }
 
   function setField(key, val) {
     setForm(f => ({ ...f, [key]: val }));
+  }
+
+  async function handleSearchInterests(q) {
+    setInterestQuery(q);
+    if (!q || q.length < 2) { setInterestSuggestions([]); return; }
+    setSearchingInterests(true);
+    try {
+      const data = await searchInterests(q);
+      setInterestSuggestions(data.interests || []);
+    } catch (e) {}
+    finally { setSearchingInterests(false); }
+  }
+
+  function addInterest(interest) {
+    if (!form.interests.some(i => i.id === interest.id)) {
+      setField('interests', [...form.interests, { id: interest.id, name: interest.name }]);
+    }
+    setInterestQuery('');
+    setInterestSuggestions([]);
+  }
+
+  function removeInterest(id) {
+    setField('interests', form.interests.filter(i => i.id !== id));
   }
 
   async function handlePublish(e) {
@@ -508,8 +543,10 @@ function CreateAdTab({ account, accounts, onSuccess }) {
           age_min: parseInt(form.age_min),
           age_max: parseInt(form.age_max),
           genders: form.genders,
+          interests: form.interests,
         },
         page_id:             form.page_id,
+        whatsapp_number:     form.whatsapp_number || undefined,
         headline:            form.headline.trim(),
         body:                form.body.trim(),
         description:         form.description.trim(),
@@ -592,9 +629,9 @@ function CreateAdTab({ account, accounts, onSuccess }) {
       {step === 2 && (
         <div className="card">
           <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 6 }}>2. Define Your Audience</div>
-          <div style={{ fontSize: 13, color: 'var(--clr-text-2)', marginBottom: 20 }}>Choose who will see your ad</div>
+          <div style={{ fontSize: 13, color: 'var(--clr-text-2)', marginBottom: 20 }}>Choose demographics, location, and interest targeting</div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
             <div className="form-group">
               <label className="form-label">Country / Region</label>
               <select className="form-input" value={form.countries[0]} onChange={e => setField('countries', [e.target.value])}>
@@ -620,6 +657,50 @@ function CreateAdTab({ account, accounts, onSuccess }) {
               <label className="form-label">Max Age</label>
               <input className="form-input" type="number" min="18" max="65" value={form.age_max} onChange={e => setField('age_max', e.target.value)} />
             </div>
+          </div>
+
+          {/* Detailed Interests Search */}
+          <div className="form-group" style={{ position: 'relative' }}>
+            <label className="form-label">🎯 Detailed Targeting / Interests (Optional)</label>
+            <input
+              className="form-input"
+              placeholder="🔍 Search interests e.g. Health & wellness, Ayurveda, Shopping, Real estate..."
+              value={interestQuery}
+              onChange={e => handleSearchInterests(e.target.value)}
+            />
+
+            {/* Autocomplete dropdown */}
+            {interestSuggestions.length > 0 && (
+              <div style={{
+                position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 10,
+                background: 'var(--clr-surface)', border: '1px solid var(--clr-border)',
+                borderRadius: 8, maxHeight: 180, overflowY: 'auto', boxShadow: '0 8px 24px rgba(0,0,0,.3)'
+              }}>
+                {interestSuggestions.map(item => (
+                  <div
+                    key={item.id}
+                    onClick={() => addInterest(item)}
+                    style={{ padding: '8px 12px', fontSize: 12, cursor: 'pointer', borderBottom: '1px solid rgba(255,255,255,.05)' }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(37,211,102,.1)'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                  >
+                    <strong>{item.name}</strong> <span style={{ color: 'var(--clr-text-3)', fontSize: 10 }}>({item.audience_size_lower_bound ? formatNum(item.audience_size_lower_bound) + ' people' : item.topic || 'Interest'})</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Selected Interest chips */}
+            {form.interests.length > 0 && (
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 10 }}>
+                {form.interests.map(item => (
+                  <span key={item.id} className="badge badge--green" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px', fontSize: 11 }}>
+                    🎯 {item.name}
+                    <button type="button" onClick={() => removeInterest(item.id)} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', fontSize: 11, padding: 0 }}>✕</button>
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 24 }}>
@@ -676,7 +757,17 @@ function CreateAdTab({ account, accounts, onSuccess }) {
               <div className="form-group">
                 <label className="form-label">Facebook Page *</label>
                 {pages.length > 0 ? (
-                  <select className="form-input" value={form.page_id} onChange={e => setField('page_id', e.target.value)}>
+                  <select
+                    className="form-input"
+                    value={form.page_id}
+                    onChange={e => {
+                      const selPage = pages.find(p => p.id === e.target.value);
+                      setField('page_id', e.target.value);
+                      if (form.whatsapp_source === 'page' && selPage?.whatsapp_number) {
+                        setField('whatsapp_number', selPage.whatsapp_number);
+                      }
+                    }}
+                  >
                     {pages.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                   </select>
                 ) : (
@@ -699,8 +790,10 @@ function CreateAdTab({ account, accounts, onSuccess }) {
                       if (src === 'page') {
                         const curPage = pages.find(p => p.id === form.page_id);
                         setField('whatsapp_number', curPage?.whatsapp_number || '');
-                      } else if (src === 'waba' && wabaAccounts.length > 0) {
-                        setField('whatsapp_number', wabaAccounts[0].display_number || '');
+                      } else if (src.startsWith('waba_')) {
+                        const wId = src.replace('waba_', '');
+                        const wAcc = wabaAccounts.find(x => x.id === wId);
+                        setField('whatsapp_number', wAcc?.display_number || '');
                       } else if (src === 'custom') {
                         setField('whatsapp_number', '');
                       }
@@ -733,7 +826,6 @@ function CreateAdTab({ account, accounts, onSuccess }) {
                   Incoming leads from this ad will automatically land in your CRM & Live Chat.
                 </div>
               </div>
-
 
               <div className="form-group">
                 <label className="form-label">Ad Headline *</label>
@@ -785,7 +877,7 @@ function CreateAdTab({ account, accounts, onSuccess }) {
                 </div>
               </div>
               <div style={{ fontSize: 11, color: 'var(--clr-text-3)', marginTop: 10, lineHeight: 1.4 }}>
-                💡 <strong>Tip:</strong> Users who click this ad will open your WhatsApp ({account?.name || 'connected number'}) directly.
+                💡 <strong>Destination:</strong> {form.whatsapp_number ? `+${form.whatsapp_number.replace(/\D/g, '')}` : 'Page default WhatsApp'}
               </div>
             </div>
           </div>
@@ -804,16 +896,18 @@ function CreateAdTab({ account, accounts, onSuccess }) {
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 24 }}>
             {[
-              ['Campaign Name',  form.campaign_name],
-              ['Objective',      `${selectedObjective?.icon} ${selectedObjective?.name}`],
-              ['Target Country', COUNTRIES.find(c => c.value === form.countries[0])?.label],
-              ['Age Range',      `${form.age_min} – ${form.age_max}`],
-              ['Daily Budget',   `${account?.currency === 'INR' ? '₹' : '$'}${form.daily_budget}`],
-              ['Launch Status',  form.status],
-              ['Facebook Page',  pages.find(p => p.id === form.page_id)?.name || '—'],
-              ['Headline',       form.headline],
-              ['Ad Text',        form.body],
-              ['CTA',            form.call_to_action_type],
+              ['Campaign Name',    form.campaign_name],
+              ['Objective',        `${selectedObjective?.icon} ${selectedObjective?.name}`],
+              ['Target Country',   COUNTRIES.find(c => c.value === form.countries[0])?.label],
+              ['Age Range',        `${form.age_min} – ${form.age_max}`],
+              ['Interests',        form.interests.length > 0 ? form.interests.map(i => i.name).join(', ') : 'All / Broad Audience'],
+              ['Daily Budget',     `${account?.currency === 'INR' ? '₹' : '$'}${form.daily_budget}`],
+              ['Launch Status',    form.status],
+              ['Facebook Page',    pages.find(p => p.id === form.page_id)?.name || '—'],
+              ['Target WhatsApp',  form.whatsapp_number || 'Page Default WhatsApp'],
+              ['Headline',         form.headline],
+              ['Ad Text',          form.body],
+              ['CTA',              form.call_to_action_type],
             ].map(([label, val]) => (
               <div key={label} style={{ display: 'flex', gap: 12, padding: '10px 14px', background: 'var(--clr-surface-2)', borderRadius: 8 }}>
                 <div style={{ width: 140, fontSize: 12, fontWeight: 700, color: 'var(--clr-text-2)', flexShrink: 0 }}>{label}</div>
@@ -843,13 +937,32 @@ function CreateAdTab({ account, accounts, onSuccess }) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  TAB: AUDIENCES
+//  TAB: AUDIENCES (Custom, Lookalike, Saved)
 // ═══════════════════════════════════════════════════════════════
 
 function AudiencesTab({ account }) {
-  const [audiences, setAudiences] = useState([]);
-  const [loading,   setLoading]   = useState(false);
-  const [error,     setError]     = useState('');
+  const [filter,       setFilter]       = useState('all');
+  const [audiences,    setAudiences]    = useState([]);
+  const [customList,   setCustomList]   = useState([]);
+  const [lookalikeList, setLookalikeList] = useState([]);
+  const [savedList,    setSavedList]    = useState([]);
+  const [loading,      setLoading]      = useState(false);
+  const [error,        setError]        = useState('');
+
+  // Modals
+  const [showCustomModal,    setShowCustomModal]    = useState(false);
+  const [showLookalikeModal, setShowLookalikeModal] = useState(false);
+  const [showSavedModal,     setShowSavedModal]     = useState(false);
+  const [saving,             setSaving]             = useState(false);
+
+  // Forms
+  const [customForm, setCustomForm] = useState({ name: '', description: '', sync_from_crm: true });
+  const [lookalikeForm, setLookalikeForm] = useState({ name: '', origin_audience_id: '', country: 'IN', ratio: '0.01' });
+  const [savedForm, setSavedForm] = useState({ name: '', description: '', countries: ['IN'], age_min: 18, age_max: 65, genders: [0], interests: [] });
+
+  // Interest search for Saved Audience
+  const [sq, setSq] = useState('');
+  const [suggs, setSuggs] = useState([]);
 
   useEffect(() => { if (account) load(); }, [account]);
 
@@ -858,22 +971,128 @@ function AudiencesTab({ account }) {
     try {
       const data = await listAudiences();
       setAudiences(data.audiences || []);
+      setCustomList(data.custom_audiences || []);
+      setLookalikeList(data.lookalike_audiences || []);
+      setSavedList(data.saved_audiences || []);
     } catch (e) { setError(e.message); }
     finally { setLoading(false); }
   }
 
+  async function handleCreateCustom(e) {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      await createCustomAudience(customForm);
+      setShowCustomModal(false);
+      setCustomForm({ name: '', description: '', sync_from_crm: true });
+      load();
+    } catch (e) { alert(e.message); }
+    finally { setSaving(false); }
+  }
+
+  async function handleCreateLookalike(e) {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      await createLookalikeAudience(lookalikeForm);
+      setShowLookalikeModal(false);
+      setLookalikeForm({ name: '', origin_audience_id: '', country: 'IN', ratio: '0.01' });
+      load();
+    } catch (e) { alert(e.message); }
+    finally { setSaving(false); }
+  }
+
+  async function handleSearchSavedInterests(q) {
+    setSq(q);
+    if (!q || q.length < 2) { setSuggs([]); return; }
+    try {
+      const data = await searchInterests(q);
+      setSuggs(data.interests || []);
+    } catch (e) {}
+  }
+
+  async function handleCreateSaved(e) {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      await createSavedAudience(savedForm);
+      setShowSavedModal(false);
+      setSavedForm({ name: '', description: '', countries: ['IN'], age_min: 18, age_max: 65, genders: [0], interests: [] });
+      load();
+    } catch (e) { alert(e.message); }
+    finally { setSaving(false); }
+  }
+
+  async function handleDelete(id) {
+    if (!confirm('Delete this audience from Meta?')) return;
+    try {
+      await deleteAudience(id);
+      load();
+    } catch (e) { alert(e.message); }
+  }
+
   if (!account) return <div className="card" style={{ textAlign: 'center', padding: 48 }}><p style={{ color: 'var(--clr-text-2)' }}>Connect an Ad Account first</p></div>;
+
+  // Filter list
+  let displayList = [];
+  if (filter === 'all') {
+    displayList = [...audiences, ...savedList.map(s => ({ ...s, subtype: 'SAVED' }))];
+  } else if (filter === 'custom') {
+    displayList = customList;
+  } else if (filter === 'lookalike') {
+    displayList = lookalikeList;
+  } else if (filter === 'saved') {
+    displayList = savedList.map(s => ({ ...s, subtype: 'SAVED' }));
+  }
 
   return (
     <div>
+      {/* Top action bar */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
+        <div style={{ display: 'flex', gap: 6 }}>
+          {[
+            ['all',       `All (${audiences.length + savedList.length})`],
+            ['custom',    `👥 Custom (${customList.length})`],
+            ['lookalike', `🧬 Lookalike (${lookalikeList.length})`],
+            ['saved',     `🎯 Saved (${savedList.length})`],
+          ].map(([k, label]) => (
+            <button
+              key={k}
+              className={`chat-filter-btn${filter === k ? ' chat-filter-btn--active' : ''}`}
+              onClick={() => setFilter(k)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="btn btn--secondary btn--sm" onClick={() => setShowCustomModal(true)}>
+            + Custom Audience
+          </button>
+          <button className="btn btn--secondary btn--sm" onClick={() => setShowLookalikeModal(true)}>
+            + Lookalike Audience
+          </button>
+          <button className="btn btn--primary btn--sm" onClick={() => setShowSavedModal(true)}>
+            + Saved Targeting
+          </button>
+          <button className="btn btn--ghost btn--sm" onClick={load} disabled={loading}>
+            ↻
+          </button>
+        </div>
+      </div>
+
       {error && <div className="alert alert--error" style={{ marginBottom: 16 }}>{error}</div>}
+
       {loading ? (
         <div className="loading-center"><div className="spinner" /></div>
-      ) : audiences.length === 0 ? (
+      ) : displayList.length === 0 ? (
         <div className="card" style={{ textAlign: 'center', padding: 48 }}>
           <div style={{ fontSize: 40, marginBottom: 12 }}>👥</div>
-          <h3>No Custom Audiences</h3>
-          <p style={{ color: 'var(--clr-text-2)' }}>Create Custom Audiences in Meta Ads Manager and they will appear here.</p>
+          <h3>No Audiences Found</h3>
+          <p style={{ color: 'var(--clr-text-2)', marginBottom: 16 }}>
+            Define custom, lookalike, or saved audiences using the buttons above.
+          </p>
         </div>
       ) : (
         <div className="table-wrap">
@@ -883,20 +1102,300 @@ function AudiencesTab({ account }) {
                 <th>Audience Name</th>
                 <th>Type</th>
                 <th>Approx. Size</th>
-                <th>Description</th>
+                <th>Details / Targetings</th>
+                <th style={{ textAlign: 'right' }}>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {audiences.map(a => (
-                <tr key={a.id}>
-                  <td style={{ fontWeight: 600 }}>{a.name}</td>
-                  <td><span className="badge badge--blue">{a.subtype}</span></td>
-                  <td style={{ fontFamily: 'monospace' }}>{a.approximate_count_lower_bound ? formatNum(a.approximate_count_lower_bound) + '+' : '—'}</td>
-                  <td style={{ color: 'var(--clr-text-2)', fontSize: 12 }}>{a.description || '—'}</td>
-                </tr>
-              ))}
+              {displayList.map(a => {
+                const isLookalike = a.subtype === 'LOOKALIKE' || a.lookalike_spec;
+                const isSaved = a.subtype === 'SAVED';
+
+                return (
+                  <tr key={a.id}>
+                    <td>
+                      <div style={{ fontWeight: 600, fontSize: 13 }}>{a.name}</div>
+                      <div style={{ fontSize: 11, color: 'var(--clr-text-3)', marginTop: 2 }}>ID: {a.id}</div>
+                    </td>
+                    <td>
+                      {isLookalike ? (
+                        <span className="badge badge--green">🧬 Lookalike</span>
+                      ) : isSaved ? (
+                        <span className="badge badge--blue">🎯 Saved</span>
+                      ) : (
+                        <span className="badge badge--gray">👥 {a.subtype || 'Custom'}</span>
+                      )}
+                    </td>
+                    <td style={{ fontFamily: 'monospace', fontWeight: 600 }}>
+                      {a.approximate_count_lower_bound
+                        ? `${formatNum(a.approximate_count_lower_bound)} - ${formatNum(a.approximate_count_upper_bound || a.approximate_count_lower_bound)}`
+                        : a.approximate_count_upper_bound ? `${formatNum(a.approximate_count_upper_bound)}` : '—'}
+                    </td>
+                    <td style={{ color: 'var(--clr-text-2)', fontSize: 12 }}>
+                      {a.description || (a.targeting?.geo_locations?.countries?.join(', ') ? `📍 ${a.targeting.geo_locations.countries.join(', ')} (Age ${a.targeting.age_min || 18}-${a.targeting.age_max || 65})` : '—')}
+                    </td>
+                    <td style={{ textAlign: 'right' }}>
+                      <button
+                        className="btn btn--danger btn--sm"
+                        style={{ fontSize: 11, padding: '3px 8px' }}
+                        onClick={() => handleDelete(a.id)}
+                        title="Delete Audience"
+                      >
+                        ✕
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* ── Modal: Custom Audience ── */}
+      {showCustomModal && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowCustomModal(false)}>
+          <div className="modal-box" style={{ maxWidth: 480 }}>
+            <div className="modal-title">👥 Create Custom Audience</div>
+            <form onSubmit={handleCreateCustom} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div className="form-group">
+                <label className="form-label">Audience Name *</label>
+                <input
+                  className="form-input"
+                  placeholder="e.g. Existing Customers / Inbound WhatsApp Leads"
+                  value={customForm.name}
+                  onChange={e => setCustomForm(f => ({ ...f, name: e.target.value }))}
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Description (Optional)</label>
+                <input
+                  className="form-input"
+                  placeholder="e.g. Leads collected from WhatsApp CRM"
+                  value={customForm.description}
+                  onChange={e => setCustomForm(f => ({ ...f, description: e.target.value }))}
+                />
+              </div>
+
+              <div style={{ background: 'rgba(37,211,102,.1)', border: '1px solid rgba(37,211,102,.25)', borderRadius: 8, padding: '12px 14px' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: 'var(--clr-text)' }}>
+                  <input
+                    type="checkbox"
+                    checked={customForm.sync_from_crm}
+                    onChange={e => setCustomForm(f => ({ ...f, sync_from_crm: e.target.checked }))}
+                  />
+                  <span>⚡ Auto-sync phone numbers from CRM Contacts table</span>
+                </label>
+                <div style={{ fontSize: 11, color: 'var(--clr-text-3)', marginTop: 4, marginLeft: 24 }}>
+                  Contacts will be SHA-256 hashed and securely matched by Meta.
+                </div>
+              </div>
+
+              <div className="modal-footer">
+                <button type="button" className="btn btn--ghost" onClick={() => setShowCustomModal(false)}>Cancel</button>
+                <button type="submit" className="btn btn--primary" disabled={saving}>
+                  {saving ? 'Creating...' : 'Create Audience'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal: Lookalike Audience ── */}
+      {showLookalikeModal && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowLookalikeModal(false)}>
+          <div className="modal-box" style={{ maxWidth: 480 }}>
+            <div className="modal-title">🧬 Create Lookalike Audience</div>
+            <form onSubmit={handleCreateLookalike} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div className="form-group">
+                <label className="form-label">Lookalike Audience Name *</label>
+                <input
+                  className="form-input"
+                  placeholder="e.g. Lookalike (1%) — India — Website Visitors"
+                  value={lookalikeForm.name}
+                  onChange={e => setLookalikeForm(f => ({ ...f, name: e.target.value }))}
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Source Audience *</label>
+                <select
+                  className="form-input"
+                  value={lookalikeForm.origin_audience_id}
+                  onChange={e => setLookalikeForm(f => ({ ...f, origin_audience_id: e.target.value }))}
+                  required
+                >
+                  <option value="">Select source custom audience...</option>
+                  {audiences.map(a => (
+                    <option key={a.id} value={a.id}>{a.name} ({a.subtype || 'Custom'})</option>
+                  ))}
+                </select>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div className="form-group">
+                  <label className="form-label">Target Country</label>
+                  <select
+                    className="form-input"
+                    value={lookalikeForm.country}
+                    onChange={e => setLookalikeForm(f => ({ ...f, country: e.target.value }))}
+                  >
+                    {COUNTRIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Audience Size Ratio</label>
+                  <select
+                    className="form-input"
+                    value={lookalikeForm.ratio}
+                    onChange={e => setLookalikeForm(f => ({ ...f, ratio: e.target.value }))}
+                  >
+                    <option value="0.01">1% (Most Similar)</option>
+                    <option value="0.02">2%</option>
+                    <option value="0.03">3%</option>
+                    <option value="0.05">5%</option>
+                    <option value="0.10">10% (Broadest Reach)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="modal-footer">
+                <button type="button" className="btn btn--ghost" onClick={() => setShowLookalikeModal(false)}>Cancel</button>
+                <button type="submit" className="btn btn--primary" disabled={saving || !lookalikeForm.origin_audience_id}>
+                  {saving ? 'Creating...' : 'Create Lookalike'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal: Saved Audience ── */}
+      {showSavedModal && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowSavedModal(false)}>
+          <div className="modal-box" style={{ maxWidth: 540 }}>
+            <div className="modal-title">🎯 Define Saved Audience (Targeting)</div>
+            <form onSubmit={handleCreateSaved} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div className="form-group">
+                <label className="form-label">Audience Name *</label>
+                <input
+                  className="form-input"
+                  placeholder="e.g. India — Health & Wellness Enthusiasts (25-45)"
+                  value={savedForm.name}
+                  onChange={e => setSavedForm(f => ({ ...f, name: e.target.value }))}
+                  required
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div className="form-group">
+                  <label className="form-label">Country</label>
+                  <select
+                    className="form-input"
+                    value={savedForm.countries[0]}
+                    onChange={e => setSavedForm(f => ({ ...f, countries: [e.target.value] }))}
+                  >
+                    {COUNTRIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Gender</label>
+                  <select
+                    className="form-input"
+                    value={savedForm.genders[0]}
+                    onChange={e => setSavedForm(f => ({ ...f, genders: [parseInt(e.target.value)] }))}
+                  >
+                    <option value={0}>All Genders</option>
+                    <option value={1}>Male Only</option>
+                    <option value={2}>Female Only</option>
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Min Age</label>
+                  <input
+                    className="form-input"
+                    type="number"
+                    min="18"
+                    max="65"
+                    value={savedForm.age_min}
+                    onChange={e => setSavedForm(f => ({ ...f, age_min: e.target.value }))}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Max Age</label>
+                  <input
+                    className="form-input"
+                    type="number"
+                    min="18"
+                    max="65"
+                    value={savedForm.age_max}
+                    onChange={e => setSavedForm(f => ({ ...f, age_max: e.target.value }))}
+                  />
+                </div>
+              </div>
+
+              {/* Interests search */}
+              <div className="form-group" style={{ position: 'relative' }}>
+                <label className="form-label">🎯 Detailed Interests Targeting</label>
+                <input
+                  className="form-input"
+                  placeholder="Search interests e.g. Healthcare, Fitness, Ayurveda, Shopping..."
+                  value={sq}
+                  onChange={e => handleSearchSavedInterests(e.target.value)}
+                />
+                {suggs.length > 0 && (
+                  <div style={{
+                    position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 10,
+                    background: 'var(--clr-surface)', border: '1px solid var(--clr-border)',
+                    borderRadius: 8, maxHeight: 160, overflowY: 'auto', boxShadow: '0 8px 24px rgba(0,0,0,.3)'
+                  }}>
+                    {suggs.map(item => (
+                      <div
+                        key={item.id}
+                        onClick={() => {
+                          if (!savedForm.interests.some(i => i.id === item.id)) {
+                            setSavedForm(f => ({ ...f, interests: [...f.interests, { id: item.id, name: item.name }] }));
+                          }
+                          setSq(''); setSuggs([]);
+                        }}
+                        style={{ padding: '8px 12px', fontSize: 12, cursor: 'pointer', borderBottom: '1px solid rgba(255,255,255,.05)' }}
+                        onMouseEnter={e => e.currentTarget.style.background = 'rgba(37,211,102,.1)'}
+                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                      >
+                        <strong>{item.name}</strong> <span style={{ color: 'var(--clr-text-3)', fontSize: 10 }}>({item.topic || 'Interest'})</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {savedForm.interests.length > 0 && (
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 10 }}>
+                    {savedForm.interests.map(item => (
+                      <span key={item.id} className="badge badge--green" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px', fontSize: 11 }}>
+                        🎯 {item.name}
+                        <button type="button" onClick={() => setSavedForm(f => ({ ...f, interests: f.interests.filter(i => i.id !== item.id) }))} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', fontSize: 11, padding: 0 }}>✕</button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="modal-footer">
+                <button type="button" className="btn btn--ghost" onClick={() => setShowSavedModal(false)}>Cancel</button>
+                <button type="submit" className="btn btn--primary" disabled={saving || !savedForm.name.trim()}>
+                  {saving ? 'Saving...' : 'Save Audience'}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>

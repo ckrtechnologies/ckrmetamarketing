@@ -330,8 +330,120 @@ async function listAudiences(req, res) {
   try {
     const account = await adsRepo.getActiveAdAccount(req.orgId);
     if (!account) return res.status(404).json({ error: 'No connected Ad Account' });
-    const audiences = await metaAds.listAudiences(account.access_token, account.act_id);
-    res.json({ audiences });
+    
+    const [custom, saved] = await Promise.all([
+      metaAds.listCustomAudiences(account.access_token, account.act_id),
+      metaAds.listSavedAudiences(account.access_token, account.act_id),
+    ]);
+
+    res.json({
+      audiences: custom,
+      custom_audiences: custom.filter(a => a.subtype !== 'LOOKALIKE'),
+      lookalike_audiences: custom.filter(a => a.subtype === 'LOOKALIKE'),
+      saved_audiences: saved,
+    });
+  } catch (err) {
+    const detail = err.response?.data?.error?.message || err.message;
+    res.status(400).json({ error: detail });
+  }
+}
+
+async function createCustomAudience(req, res) {
+  try {
+    const { name, description, sync_from_crm } = req.body;
+    if (!name) return res.status(400).json({ error: 'name is required' });
+
+    const account = await adsRepo.getActiveAdAccount(req.orgId);
+    if (!account) return res.status(404).json({ error: 'No connected Ad Account' });
+
+    const result = await metaAds.createCustomAudience(account.access_token, account.act_id, {
+      name,
+      description,
+    });
+
+    // If user wants to sync CRM contacts into this audience immediately
+    if (sync_from_crm && result.id) {
+      const contactRepo = require('../repositories/contactRepo');
+      const { contacts } = await contactRepo.getContacts(req.orgId, { limit: 10000 });
+      const phones = (contacts || []).map(c => c.phone).filter(Boolean);
+      if (phones.length > 0) {
+        await metaAds.uploadUsersToAudience(account.access_token, result.id, phones).catch(() => {});
+      }
+    }
+
+    res.status(201).json({ audience: result });
+  } catch (err) {
+    const detail = err.response?.data?.error?.message || err.message;
+    res.status(400).json({ error: detail });
+  }
+}
+
+async function createLookalikeAudience(req, res) {
+  try {
+    const { name, origin_audience_id, country = 'IN', ratio = 0.01 } = req.body;
+    if (!name || !origin_audience_id) {
+      return res.status(400).json({ error: 'name and origin_audience_id are required' });
+    }
+
+    const account = await adsRepo.getActiveAdAccount(req.orgId);
+    if (!account) return res.status(404).json({ error: 'No connected Ad Account' });
+
+    const result = await metaAds.createLookalikeAudience(account.access_token, account.act_id, {
+      name,
+      origin_audience_id,
+      country,
+      ratio: parseFloat(ratio),
+    });
+
+    res.status(201).json({ audience: result });
+  } catch (err) {
+    const detail = err.response?.data?.error?.message || err.message;
+    res.status(400).json({ error: detail });
+  }
+}
+
+async function createSavedAudience(req, res) {
+  try {
+    const { name, description, countries = ['IN'], age_min = 18, age_max = 65, genders = [0], interests = [] } = req.body;
+    if (!name) return res.status(400).json({ error: 'name is required' });
+
+    const account = await adsRepo.getActiveAdAccount(req.orgId);
+    if (!account) return res.status(404).json({ error: 'No connected Ad Account' });
+
+    const targeting = {
+      geo_locations: { countries },
+      age_min: parseInt(age_min),
+      age_max: parseInt(age_max),
+      genders,
+      publisher_platforms: ['facebook', 'instagram'],
+    };
+
+    if (interests && interests.length > 0) {
+      targeting.flexible_spec = [{
+        interests: interests.map(i => ({ id: i.id, name: i.name })),
+      }];
+    }
+
+    const result = await metaAds.createSavedAudience(account.access_token, account.act_id, {
+      name,
+      description,
+      targeting,
+    });
+
+    res.status(201).json({ audience: result });
+  } catch (err) {
+    const detail = err.response?.data?.error?.message || err.message;
+    res.status(400).json({ error: detail });
+  }
+}
+
+async function deleteAudience(req, res) {
+  try {
+    const account = await adsRepo.getActiveAdAccount(req.orgId);
+    if (!account) return res.status(404).json({ error: 'No connected Ad Account' });
+
+    await metaAds.deleteAudience(account.access_token, req.params.id);
+    res.json({ success: true });
   } catch (err) {
     const detail = err.response?.data?.error?.message || err.message;
     res.status(400).json({ error: detail });
@@ -349,6 +461,7 @@ async function searchInterests(req, res) {
     res.status(400).json({ error: detail });
   }
 }
+
 
 // ── Full Campaign Publish (Campaign + Ad Set + Creative + Ad) ──
 

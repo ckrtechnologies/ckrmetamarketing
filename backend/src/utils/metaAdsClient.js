@@ -270,26 +270,96 @@ async function getAccountInsights(accessToken, actId, { date_preset = 'last_30d'
 
 // ── Audiences ─────────────────────────────────────────────────
 
-async function listAudiences(accessToken, actId) {
+async function listCustomAudiences(accessToken, actId) {
   const r = await client(accessToken).get(`/${actId}/customaudiences`, {
     params: {
       access_token: accessToken,
-      fields: 'id,name,subtype,approximate_count_lower_bound,description',
-      limit: 50,
+      fields: 'id,name,subtype,approximate_count_lower_bound,approximate_count_upper_bound,description,lookalike_spec,delivery_status,operation_status,time_created',
+      limit: 100,
     },
   });
   return r.data?.data || [];
 }
 
+async function listSavedAudiences(accessToken, actId) {
+  try {
+    const r = await client(accessToken).get(`/${actId}/saved_audiences`, {
+      params: {
+        access_token: accessToken,
+        fields: 'id,name,targeting,approximate_count_lower_bound,approximate_count_upper_bound,description,time_created',
+        limit: 100,
+      },
+    });
+    return r.data?.data || [];
+  } catch (err) {
+    return [];
+  }
+}
+
+async function createCustomAudience(accessToken, actId, { name, description, customer_file_source = 'USER_PROVIDED_ONLY_HASHED_DATA' }) {
+  const r = await client(accessToken).post(`/${actId}/customaudiences`, {
+    name,
+    description: description || '',
+    subtype: 'CUSTOM',
+    customer_file_source,
+  });
+  return r.data;
+}
+
+async function uploadUsersToAudience(accessToken, audienceId, hashedPhones = []) {
+  if (!hashedPhones.length) return { num_received: 0 };
+  const crypto = require('crypto');
+  const hashed = hashedPhones.map(p => crypto.createHash('sha256').update(String(p).trim()).digest('hex'));
+  
+  const payload = {
+    schema: ['PHONE_SHA256'],
+    data: hashed.map(h => [h]),
+  };
+
+  const r = await client(accessToken).post(`/${audienceId}/users`, {
+    payload: JSON.stringify(payload),
+  });
+  return r.data;
+}
+
+async function createLookalikeAudience(accessToken, actId, { name, origin_audience_id, country = 'IN', ratio = 0.01 }) {
+  const r = await client(accessToken).post(`/${actId}/customaudiences`, {
+    name,
+    subtype: 'LOOKALIKE',
+    origin_audience_id,
+    lookalike_spec: JSON.stringify({
+      type: 'similarity',
+      country,
+      ratio,
+    }),
+  });
+  return r.data;
+}
+
+async function createSavedAudience(accessToken, actId, { name, description, targeting }) {
+  const r = await client(accessToken).post(`/${actId}/saved_audiences`, {
+    name,
+    description: description || '',
+    targeting,
+  });
+  return r.data;
+}
+
+async function deleteAudience(accessToken, audienceId) {
+  const r = await client(accessToken).delete(`/${audienceId}`);
+  return r.data;
+}
+
 // ── Interests Search ──────────────────────────────────────────
 
 async function searchInterests(accessToken, query) {
+  if (!query) return [];
   const r = await client(accessToken).get('/search', {
     params: {
       access_token: accessToken,
       type: 'adinterest',
       q: query,
-      limit: 20,
+      limit: 25,
     },
   });
   return r.data?.data || [];
@@ -330,6 +400,9 @@ module.exports = {
   listCreatives, createCreative,
   listAds, createAd, updateAd, deleteAd,
   getCampaignInsights, getAccountInsights,
-  listAudiences, searchInterests,
+  listCustomAudiences, listSavedAudiences,
+  createCustomAudience, uploadUsersToAudience, createLookalikeAudience, createSavedAudience, deleteAudience,
+  searchInterests,
   listPages, uploadImage,
 };
+

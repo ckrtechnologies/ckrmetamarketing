@@ -35,7 +35,12 @@ router.get('/ads',               authenticate, ctrl.listAds);
 router.get('/insights',          authenticate, ctrl.getAccountInsights);
 
 // ── Audiences ────────────────────────────────────────────────────
-router.get('/audiences',         authenticate, ctrl.listAudiences);
-router.get('/interests',         authenticate, ctrl.searchInterests);
+router.get('/audiences',             authenticate, ctrl.listAudiences);
+router.post('/audiences/custom',     authenticate, ctrl.createCustomAudience);
+router.post('/audiences/lookalike',  authenticate, ctrl.createLookalikeAudience);
+router.post('/audiences/saved',      authenticate, ctrl.createSavedAudience);
+router.delete('/audiences/:id',      authenticate, ctrl.deleteAudience);
+router.get('/interests',             authenticate, ctrl.searchInterests);
+
 
 module.exports = router;
