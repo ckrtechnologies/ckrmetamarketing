@@ -406,9 +406,10 @@ async function listPages(accessToken) {
 // ── Image Upload ──────────────────────────────────────────────
 
 async function uploadImage(accessToken, actId, imageBase64) {
+  const cleanBase64 = String(imageBase64).replace(/^data:image\/\w+;base64,/, '');
   const FormData = require('form-data');
   const form = new FormData();
-  form.append('bytes', imageBase64);
+  form.append('bytes', cleanBase64);
   form.append('access_token', accessToken);
 
   const r = await client(accessToken).post(`/${actId}/adimages`, form, {

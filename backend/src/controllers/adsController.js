@@ -512,12 +512,23 @@ async function publishCampaign(req, res) {
     });
 
 
-    // Step 2: Upload image (if provided)
+    // Step 2: Upload image (user provided or default banner)
     let image_hash = null;
-    if (image_base64) {
-      const imgResult = await metaAds.uploadImage(account.access_token, account.act_id, image_base64);
+    let finalImageBase64 = image_base64;
+    if (!finalImageBase64) {
+      const fs = require('fs');
+      const path = require('path');
+      const bannerPath = path.join(__dirname, '../utils/defaultBanner.png');
+      if (fs.existsSync(bannerPath)) {
+        finalImageBase64 = fs.readFileSync(bannerPath).toString('base64');
+      }
+    }
+
+    if (finalImageBase64) {
+      const imgResult = await metaAds.uploadImage(account.access_token, account.act_id, finalImageBase64);
       image_hash = imgResult?.hash;
     }
+
 
     // Step 3: Create Creative
     const creativeResult = await metaAds.createCreative(account.access_token, account.act_id, {

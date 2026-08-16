@@ -656,8 +656,24 @@ function CreateAdTab({ account, accounts, onSuccess }) {
     headline:          '',
     body:              '',
     description:       '',
+    image_base64:      '',
     call_to_action_type: 'WHATSAPP_MESSAGE',
   });
+
+  function handleImageUpload(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 8 * 1024 * 1024) {
+      setError('Image file is too large (max 8MB)');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      setField('image_base64', reader.result);
+    };
+    reader.readAsDataURL(file);
+  }
+
 
   useEffect(() => {
     if (account) {
@@ -1020,6 +1036,49 @@ function CreateAdTab({ account, accounts, onSuccess }) {
                 </div>
               </div>
 
+              {/* Ad Creative Media Upload */}
+              <div className="form-group">
+                <label className="form-label">Ad Image / Banner *</label>
+                <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                  <label
+                    className="btn btn--secondary btn--sm"
+                    style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                  >
+                    📁 {form.image_base64 ? 'Change Image' : 'Choose Image (JPG/PNG)'}
+                    <input
+                      type="file"
+                      accept="image/png,image/jpeg,image/jpg,image/webp"
+                      style={{ display: 'none' }}
+                      onChange={handleImageUpload}
+                    />
+                  </label>
+                  {form.image_base64 ? (
+                    <button
+                      type="button"
+                      className="btn btn--ghost btn--sm"
+                      style={{ fontSize: 11, color: 'var(--clr-danger)' }}
+                      onClick={() => setField('image_base64', '')}
+                    >
+                      ✕ Remove
+                    </button>
+                  ) : (
+                    <span style={{ fontSize: 11, color: 'var(--clr-text-3)' }}>
+                      Optional — default green branding banner used if none selected
+                    </span>
+                  )}
+                </div>
+                {form.image_base64 && (
+                  <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <img
+                      src={form.image_base64}
+                      alt="Ad Preview"
+                      style={{ width: 80, height: 48, objectFit: 'cover', borderRadius: 4, border: '1px solid var(--clr-border)' }}
+                    />
+                    <span style={{ fontSize: 11, color: 'var(--clr-primary)' }}>✓ Image ready for upload</span>
+                  </div>
+                )}
+              </div>
+
               <div className="form-group">
                 <label className="form-label">Ad Headline *</label>
                 <input className="form-input" placeholder="e.g. Get 20% Off Today!" value={form.headline} onChange={e => setField('headline', e.target.value)} maxLength={40} />
@@ -1056,7 +1115,16 @@ function CreateAdTab({ account, accounts, onSuccess }) {
               <div className="wa-ad-preview">
                 <div className="wa-ad-preview__sponsor">Sponsored · {pages.find(p => p.id === form.page_id)?.name || 'Your Page'}</div>
                 <div className="wa-ad-preview__bubble">
-                  <div className="wa-ad-preview__image">🖼️</div>
+                  <div className="wa-ad-preview__image" style={{ padding: 0, overflow: 'hidden', height: 140, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0a2318' }}>
+                    {form.image_base64 ? (
+                      <img src={form.image_base64} alt="Ad creative" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, color: 'var(--clr-primary)' }}>
+                        <span style={{ fontSize: 24 }}>🖼️</span>
+                        <span style={{ fontSize: 10, opacity: 0.8 }}>WhatsApp Ad Banner</span>
+                      </div>
+                    )}
+                  </div>
                   <div className="wa-ad-preview__content">
                     <div className="wa-ad-preview__headline">{form.headline || 'Your Headline Here'}</div>
                     <div className="wa-ad-preview__body">{form.body || 'Your ad copy will appear here. Keep it concise and compelling!'}</div>

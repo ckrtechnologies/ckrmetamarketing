@@ -144,9 +144,10 @@ export default function ChatPage({ user }) {
     } catch (e) {}
     finally { setLoadingMsgs(false); }
 
-    // Poll for new messages every 5 seconds
+    // Poll for new messages every 12 seconds only if the tab is active
     pollIntervalRef.current = setInterval(async () => {
       try {
+        if (typeof document !== 'undefined' && document.hidden) return;
         const since = lastMsgRef.current;
         if (!since) return;
         const data = await pollMessages(conv.id, since);
@@ -160,7 +161,7 @@ export default function ChatPage({ user }) {
           });
         }
       } catch (e) {}
-    }, 5000);
+    }, 12000);
   }
 
   // Cleanup poll on unmount
