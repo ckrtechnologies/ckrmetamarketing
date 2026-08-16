@@ -38,13 +38,13 @@ async function createCampaign(req, res) {
       const contacts = await contactRepo.getContactsByGroup(req.orgId, group_id);
       recipientRows = contacts.map(c => ({
         contact_id: c.id,
-        phone: c.phone,
+        phone: require('../utils/phone').normalizePhoneNumber(c.phone),
         variables: recipients?.variableMap || null,
       }));
     } else if (recipients?.phones?.length) {
       recipientRows = recipients.phones.map(phone => ({
         contact_id: null,
-        phone: phone.replace(/\D/g, ''),
+        phone: require('../utils/phone').normalizePhoneNumber(phone),
         variables: null,
       }));
     }

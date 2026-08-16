@@ -6,7 +6,14 @@ export default function CampaignReport({ campaignId, onBack }) {
   const [loading, setLoading] = useState(true);
   const [filter,  setFilter]  = useState('');
 
-  useEffect(() => { load(); const t = setInterval(load, 5000); return () => clearInterval(t); }, []);
+  useEffect(() => {
+    load();
+    // Only keep polling if campaign is still running
+    const t = setInterval(() => {
+      if (data?.campaign?.status === 'running') load();
+    }, 10000); // 10s — only refreshes for in-flight campaigns
+    return () => clearInterval(t);
+  }, []);
 
   async function load() {
     try {

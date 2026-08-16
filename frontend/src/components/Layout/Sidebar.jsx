@@ -24,7 +24,7 @@ export default function Sidebar({ user, org }) {
       getUnreadCount().then(d => setUnread(d.unread || 0)).catch(() => {});
     }
     loadUnread();
-    const t = setInterval(loadUnread, 10000);
+    const t = setInterval(loadUnread, 30000); // 30s — unread count doesn't need real-time refresh
     return () => clearInterval(t);
   }, []);
 

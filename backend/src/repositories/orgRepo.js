@@ -85,15 +85,34 @@ async function getWabaAccounts(org_id) {
 }
 
 async function upsertWabaAccount({ org_id, waba_id, phone_number_id, display_number, display_name, access_token }) {
-  const { data, error } = await supabase
+  // Check if a WABA with this phone_number_id already exists for this org
+  const { data: existing } = await supabase
     .from('waba_accounts')
-    .upsert({ org_id, waba_id, phone_number_id, display_number, display_name, access_token }, {
-      onConflict: 'phone_number_id',
-    })
-    .select()
-    .single();
-  if (error) throw error;
-  return data;
+    .select('id')
+    .eq('org_id', org_id)
+    .eq('phone_number_id', phone_number_id)
+    .maybeSingle();
+
+  if (existing) {
+    // UPDATE existing row
+    const { data, error } = await supabase
+      .from('waba_accounts')
+      .update({ waba_id, display_number, display_name, access_token })
+      .eq('id', existing.id)
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  } else {
+    // INSERT new row
+    const { data, error } = await supabase
+      .from('waba_accounts')
+      .insert({ org_id, waba_id, phone_number_id, display_number, display_name, access_token })
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  }
 }
 
 async function setActiveWaba(org_id, waba_account_id) {
@@ -122,6 +141,18 @@ async function getActiveWaba(org_id) {
   return data;
 }
 
+async function updateWabaAccount(org_id, id, updates) {
+  const { data, error } = await supabase
+    .from('waba_accounts')
+    .update(updates)
+    .eq('id', id)
+    .eq('org_id', org_id)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
 async function deleteWabaAccount(org_id, id) {
   const { error } = await supabase
     .from('waba_accounts')
@@ -134,7 +165,7 @@ async function deleteWabaAccount(org_id, id) {
 module.exports = {
   createOrg, getOrgById, orgSlugExists,
   createUser, getUserByEmail, getUserById, getOrgMembers,
-  getWabaAccounts, upsertWabaAccount, setActiveWaba, getActiveWaba, deleteWabaAccount,
+  getWabaAccounts, upsertWabaAccount, updateWabaAccount, setActiveWaba, getActiveWaba, deleteWabaAccount,
 };
 
 // ── Utility: expose supabase instance for webhook org lookup ──

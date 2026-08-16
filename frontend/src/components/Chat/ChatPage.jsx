@@ -93,7 +93,7 @@ export default function ChatPage({ user }) {
     } catch (e) {}
     finally { setLoadingMsgs(false); }
 
-    // Start polling for new messages every 3 seconds
+    // Poll for new messages every 8 seconds
     pollIntervalRef.current = setInterval(async () => {
       try {
         const since = lastMsgRef.current;
