@@ -134,10 +134,12 @@ async function deleteCampaign(accessToken, campaignId) {
 async function listAdSets(accessToken, actId, campaignId) {
   const params = {
     access_token: accessToken,
-    fields: 'id,name,status,targeting,daily_budget,start_time,end_time,campaign_id,destination_type',
-    limit: 50,
+    fields: 'id,name,status,effective_status,targeting,daily_budget,lifetime_budget,start_time,end_time,campaign_id,destination_type,optimization_goal',
+    limit: 100,
   };
-  if (campaignId) params.campaign_id = campaignId;
+  if (campaignId) {
+    params.filtering = JSON.stringify([{ field: 'campaign.id', operator: 'EQUAL', value: String(campaignId) }]);
+  }
 
   const r = await client(accessToken).get(`/${actId}/adsets`, { params });
   return r.data?.data || [];
@@ -280,10 +282,12 @@ async function createCreative(accessToken, actId, {
 async function listAds(accessToken, actId, campaignId) {
   const params = {
     access_token: accessToken,
-    fields: 'id,name,status,creative{id,name,thumbnail_url},adset_id,campaign_id,created_time',
+    fields: 'id,name,status,effective_status,creative{id,name,title,body,image_url,thumbnail_url,call_to_action_type},adset_id,campaign_id,created_time',
     limit: 100,
   };
-  if (campaignId) params.campaign_id = campaignId;
+  if (campaignId) {
+    params.filtering = JSON.stringify([{ field: 'campaign.id', operator: 'EQUAL', value: String(campaignId) }]);
+  }
 
   const r = await client(accessToken).get(`/${actId}/ads`, { params });
   return r.data?.data || [];
