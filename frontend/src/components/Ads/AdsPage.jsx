@@ -737,151 +737,263 @@ function CampaignsTab({ account, onRefresh }) {
                             <div className="alert alert--error" style={{ margin: 0 }}>{currentTree.error}</div>
                           ) : (
                             <div className="nested-tree-container">
-                              {/* 1. AD SETS SECTION */}
-                              <div>
-                                <div className="nested-section-title">
-                                  <span>📦 Ad Sets ({currentTree?.adsets?.length || 0})</span>
+                              {(!currentTree?.adsets || currentTree.adsets.length === 0) && (!currentTree?.ads || currentTree.ads.length === 0) ? (
+                                <div style={{ fontSize: 12, color: 'var(--clr-text-3)', padding: '12px 0', textAlign: 'center' }}>
+                                  No Ad Sets or Ads found for this campaign.
                                 </div>
-                                {(!currentTree?.adsets || currentTree.adsets.length === 0) ? (
-                                  <div style={{ fontSize: 12, color: 'var(--clr-text-3)', padding: '8px 0' }}>No Ad Sets found for this campaign.</div>
-                                ) : (
-                                  <div className="nested-grid">
-                                    {currentTree.adsets.map(adset => (
-                                      <div key={adset.id} className="nested-item-card">
-                                        <div>
-                                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
-                                            <strong style={{ fontSize: 13, color: 'var(--clr-text)' }}>{adset.name}</strong>
-                                            <StatusPill status={adset.status} />
+                              ) : (
+                                <>
+                                  {/* AD SETS CONTAINER LIST */}
+                                  {(currentTree?.adsets || []).map(adset => {
+                                    const matchingAds = (currentTree?.ads || []).filter(ad => ad.adset_id === adset.id);
+                                    const t = adset.targeting || {};
+                                    
+                                    // Parse geo
+                                    const cityList = t.geo_locations?.cities?.map(c => c.name) || [];
+                                    const regionList = t.geo_locations?.regions?.map(r => r.name) || [];
+                                    const countryList = t.geo_locations?.countries || [];
+                                    const locationSummary = cityList.length > 0
+                                      ? `${cityList.slice(0, 5).join(', ')}${cityList.length > 5 ? ` +${cityList.length - 5} more` : ''}`
+                                      : regionList.length > 0
+                                      ? `${regionList.join(', ')}`
+                                      : countryList.length > 0
+                                      ? countryList.join(', ')
+                                      : 'India (IN)';
+
+                                    // Parse age & gender
+                                    const ageMin = t.age_min || 18;
+                                    const ageMax = t.age_max || 65;
+                                    const genderLabel = t.genders?.[0] === 1 ? 'Men Only' : t.genders?.[0] === 2 ? 'Women Only' : 'All Genders';
+
+                                    // Parse interests / behaviors / job titles
+                                    const rawInterests = [];
+                                    if (t.flexible_spec) {
+                                      t.flexible_spec.forEach(spec => {
+                                        if (spec.interests) spec.interests.forEach(i => rawInterests.push(i.name));
+                                        if (spec.behaviors) spec.behaviors.forEach(b => rawInterests.push(b.name));
+                                        if (spec.work_positions) spec.work_positions.forEach(w => rawInterests.push(w.name));
+                                      });
+                                    }
+                                    if (t.interests) {
+                                      t.interests.forEach(i => rawInterests.push(i.name));
+                                    }
+
+                                    // Parse devices & placements
+                                    const deviceSummary = t.device_platforms ? t.device_platforms.map(d => d === 'mobile' ? '📱 Mobile' : '💻 Desktop').join(', ') : '📱 Mobile & 💻 Desktop';
+                                    const platformSummary = t.publisher_platforms ? t.publisher_platforms.join(', ') : 'Facebook & Instagram';
+
+                                    return (
+                                      <div key={adset.id} className="nested-adset-card">
+                                        {/* Ad Set Header */}
+                                        <div className="nested-adset-header">
+                                          <div>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                                              <span style={{ fontSize: 16 }}>📦</span>
+                                              <strong style={{ fontSize: 14, color: 'var(--clr-text)' }}>{adset.name}</strong>
+                                              <StatusPill status={adset.status} />
+                                            </div>
+                                            <div style={{ fontSize: 11, color: 'var(--clr-text-3)', marginTop: 2 }}>
+                                              Ad Set ID: <code>{adset.id}</code>
+                                            </div>
                                           </div>
-                                          <div style={{ fontSize: 11, color: 'var(--clr-text-3)', marginTop: 2 }}>ID: {adset.id}</div>
-                                          
-                                          <div style={{ marginTop: 8, display: 'flex', gap: 12, flexWrap: 'wrap', fontSize: 12 }}>
-                                            <div>
+
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                                            <div style={{ textAlign: 'right' }}>
                                               <span style={{ color: 'var(--clr-text-3)', fontSize: 10, display: 'block', textTransform: 'uppercase' }}>Daily Budget</span>
-                                              <strong style={{ color: 'var(--clr-primary)', fontFamily: 'monospace' }}>
+                                              <strong style={{ color: 'var(--clr-primary)', fontFamily: 'monospace', fontSize: 14 }}>
                                                 {adset.daily_budget ? formatCurrency(adset.daily_budget, account.currency) + '/day' : '—'}
                                               </strong>
                                             </div>
-                                            {adset.optimization_goal && (
-                                              <div>
-                                                <span style={{ color: 'var(--clr-text-3)', fontSize: 10, display: 'block', textTransform: 'uppercase' }}>Optimization</span>
-                                                <span>{adset.optimization_goal}</span>
-                                              </div>
-                                            )}
+
+                                            <div style={{ display: 'flex', gap: 6 }}>
+                                              <button
+                                                className="btn btn--secondary btn--sm"
+                                                style={{ fontSize: 11, padding: '3px 8px' }}
+                                                onClick={() => setEditingItem({ type: 'adset', item: adset, campaignId: c.id })}
+                                              >
+                                                ✏️ Edit Ad Set
+                                              </button>
+                                              <button
+                                                className="btn btn--secondary btn--sm"
+                                                style={{ fontSize: 11, padding: '3px 8px' }}
+                                                onClick={() => toggleAdSetStatus(c.id, adset)}
+                                              >
+                                                {adset.status === 'ACTIVE' ? '⏸ Pause' : '▶ Resume'}
+                                              </button>
+                                              <button
+                                                className="btn btn--danger btn--sm"
+                                                style={{ fontSize: 11, padding: '3px 8px' }}
+                                                onClick={() => handleDeleteAdSet(c.id, adset)}
+                                              >
+                                                ✕
+                                              </button>
+                                            </div>
                                           </div>
                                         </div>
 
-                                        <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', marginTop: 10, borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: 8 }}>
-                                          <button
-                                            className="btn btn--secondary btn--sm"
-                                            style={{ fontSize: 11, padding: '2px 8px' }}
-                                            onClick={() => setEditingItem({ type: 'adset', item: adset, campaignId: c.id })}
-                                          >
-                                            ✏️ Edit
-                                          </button>
-                                          <button
-                                            className="btn btn--secondary btn--sm"
-                                            style={{ fontSize: 11, padding: '2px 8px' }}
-                                            onClick={() => toggleAdSetStatus(c.id, adset)}
-                                          >
-                                            {adset.status === 'ACTIVE' ? '⏸ Pause' : '▶ Resume'}
-                                          </button>
-                                          <button
-                                            className="btn btn--danger btn--sm"
-                                            style={{ fontSize: 11, padding: '2px 8px' }}
-                                            onClick={() => handleDeleteAdSet(c.id, adset)}
-                                          >
-                                            ✕
-                                          </button>
+                                        {/* Ad Set Audience, Placements & Demographics Box */}
+                                        <div className="audience-meta-box">
+                                          <div className="audience-tag-row">
+                                            <span className="audience-pill audience-pill--green">📍 {locationSummary}</span>
+                                            <span className="audience-pill audience-pill--blue">👤 Age {ageMin}–{ageMax} ({genderLabel})</span>
+                                            <span className="audience-pill audience-pill--purple">{deviceSummary}</span>
+                                            <span className="audience-pill">🌐 {platformSummary}</span>
+                                            {adset.optimization_goal && (
+                                              <span className="audience-pill">⚡ {adset.optimization_goal}</span>
+                                            )}
+                                          </div>
+
+                                          {rawInterests.length > 0 && (
+                                            <div style={{ marginTop: 2, display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center' }}>
+                                              <span style={{ fontSize: 11, color: 'var(--clr-text-3)', fontWeight: 600 }}>🎯 Targeting:</span>
+                                              {rawInterests.slice(0, 10).map((interest, idx) => (
+                                                <span key={idx} style={{ fontSize: 10, background: 'rgba(255,255,255,0.06)', padding: '2px 6px', borderRadius: 3, color: 'var(--clr-text-2)' }}>
+                                                  {interest}
+                                                </span>
+                                              ))}
+                                              {rawInterests.length > 10 && (
+                                                <span style={{ fontSize: 10, color: 'var(--clr-text-3)' }}>+{rawInterests.length - 10} more</span>
+                                              )}
+                                            </div>
+                                          )}
+                                        </div>
+
+                                        {/* Nested Ads inside this Ad Set */}
+                                        <div style={{ marginTop: 6 }}>
+                                          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--clr-text-2)', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+                                            <span>🎨 Ads in this Ad Set ({matchingAds.length})</span>
+                                          </div>
+
+                                          {matchingAds.length === 0 ? (
+                                            <div style={{ fontSize: 11, color: 'var(--clr-text-3)', fontStyle: 'italic', padding: '6px 0' }}>
+                                              No ads created inside this Ad Set yet.
+                                            </div>
+                                          ) : (
+                                            <div className="nested-ads-grid">
+                                              {matchingAds.map(ad => {
+                                                const cr = ad.creative || {};
+                                                const imgSrc = cr.image_url || cr.thumbnail_url;
+                                                const headline = cr.title || cr.object_story_spec?.link_data?.name || cr.object_story_spec?.link_data?.title;
+                                                const body = cr.body || cr.object_story_spec?.link_data?.message;
+                                                const desc = cr.object_story_spec?.link_data?.description;
+                                                const cta = cr.call_to_action_type || cr.object_story_spec?.link_data?.call_to_action?.type;
+
+                                                return (
+                                                  <div key={ad.id} className="nested-ad-card">
+                                                    <div>
+                                                      <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                                                        {imgSrc ? (
+                                                          <a href={imgSrc} target="_blank" rel="noopener noreferrer" title="Click to open high-res creative image">
+                                                            <img src={imgSrc} alt="Creative" className="nested-ad-preview-thumb" />
+                                                          </a>
+                                                        ) : (
+                                                          <div className="nested-ad-preview-thumb" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>
+                                                            🖼️
+                                                          </div>
+                                                        )}
+                                                        <div style={{ flex: 1, minWidth: 0 }}>
+                                                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 6 }}>
+                                                            <strong style={{ fontSize: 13, color: 'var(--clr-text)', wordBreak: 'break-word' }}>{ad.name}</strong>
+                                                            <StatusPill status={ad.status} />
+                                                          </div>
+                                                          <div style={{ fontSize: 11, color: 'var(--clr-text-3)', marginTop: 2 }}>ID: <code>{ad.id}</code></div>
+                                                        </div>
+                                                      </div>
+
+                                                      {/* Headline, Description & Body preview */}
+                                                      <div style={{ marginTop: 10, background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: 6, padding: '8px 10px' }}>
+                                                        {headline && (
+                                                          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--clr-text)', marginBottom: 3 }}>
+                                                            📌 {headline}
+                                                          </div>
+                                                        )}
+                                                        {body && (
+                                                          <div style={{ fontSize: 11, color: 'var(--clr-text-2)', lineHeight: 1.4, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden', whiteSpace: 'pre-line' }}>
+                                                            {body}
+                                                          </div>
+                                                        )}
+                                                        {desc && (
+                                                          <div style={{ fontSize: 10, color: 'var(--clr-text-3)', marginTop: 4 }}>
+                                                            {desc}
+                                                          </div>
+                                                        )}
+                                                      </div>
+
+                                                      {cta && (
+                                                        <div style={{ marginTop: 8, fontSize: 11, color: 'var(--clr-primary)', fontWeight: 700 }}>
+                                                          💬 CTA: {cta}
+                                                        </div>
+                                                      )}
+                                                    </div>
+
+                                                    <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', marginTop: 8, borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: 8 }}>
+                                                      <button
+                                                        className="btn btn--secondary btn--sm"
+                                                        style={{ fontSize: 11, padding: '3px 8px' }}
+                                                        onClick={() => setEditingItem({ type: 'ad', item: ad, campaignId: c.id, adset: adset })}
+                                                      >
+                                                        ✏️ Edit Ad & Copy
+                                                      </button>
+                                                      <button
+                                                        className="btn btn--secondary btn--sm"
+                                                        style={{ fontSize: 11, padding: '3px 8px' }}
+                                                        onClick={() => toggleAdStatus(c.id, ad)}
+                                                      >
+                                                        {ad.status === 'ACTIVE' ? '⏸ Pause' : '▶ Resume'}
+                                                      </button>
+                                                      <button
+                                                        className="btn btn--danger btn--sm"
+                                                        style={{ fontSize: 11, padding: '3px 8px' }}
+                                                        onClick={() => handleDeleteAd(c.id, ad)}
+                                                      >
+                                                        ✕
+                                                      </button>
+                                                    </div>
+                                                  </div>
+                                                );
+                                              })}
+                                            </div>
+                                          )}
                                         </div>
                                       </div>
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
+                                    );
+                                  })}
 
-                              {/* 2. ADS & CREATIVES SECTION */}
-                              <div>
-                                <div className="nested-section-title">
-                                  <span>🎨 Ads & Creatives ({currentTree?.ads?.length || 0})</span>
-                                </div>
-                                {(!currentTree?.ads || currentTree.ads.length === 0) ? (
-                                  <div style={{ fontSize: 12, color: 'var(--clr-text-3)', padding: '8px 0' }}>No Ads found for this campaign.</div>
-                                ) : (
-                                  <div className="nested-grid">
-                                    {currentTree.ads.map(ad => {
-                                      const cr = ad.creative || {};
-                                      const imgSrc = cr.image_url || cr.thumbnail_url;
-
-                                      return (
-                                        <div key={ad.id} className="nested-item-card">
-                                          <div>
-                                            <div style={{ display: 'flex', gap: 10 }}>
-                                              {imgSrc ? (
-                                                <a href={imgSrc} target="_blank" rel="noopener noreferrer" title="Click to view high-res creative">
-                                                  <img src={imgSrc} alt="Creative" className="nested-ad-preview-thumb" />
-                                                </a>
-                                              ) : (
-                                                <div className="nested-ad-preview-thumb" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20 }}>
-                                                  🖼️
-                                                </div>
-                                              )}
-                                              <div style={{ flex: 1, minWidth: 0 }}>
-                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 4 }}>
-                                                  <strong style={{ fontSize: 13, color: 'var(--clr-text)', wordBreak: 'break-word' }}>{ad.name}</strong>
+                                  {/* Orphan / Unassigned Ads (if any) */}
+                                  {(() => {
+                                    const orphanAds = (currentTree?.ads || []).filter(ad => !(currentTree?.adsets || []).some(s => s.id === ad.adset_id));
+                                    if (orphanAds.length === 0) return null;
+                                    return (
+                                      <div className="nested-adset-card" style={{ borderStyle: 'dashed' }}>
+                                        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--clr-text-2)', marginBottom: 8 }}>
+                                          🎨 Other Ads ({orphanAds.length})
+                                        </div>
+                                        <div className="nested-ads-grid">
+                                          {orphanAds.map(ad => (
+                                            <div key={ad.id} className="nested-ad-card">
+                                              <div>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                                  <strong style={{ fontSize: 13 }}>{ad.name}</strong>
                                                   <StatusPill status={ad.status} />
                                                 </div>
                                                 <div style={{ fontSize: 11, color: 'var(--clr-text-3)', marginTop: 2 }}>ID: {ad.id}</div>
                                               </div>
+                                              <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', marginTop: 8 }}>
+                                                <button className="btn btn--secondary btn--sm" style={{ fontSize: 11, padding: '3px 8px' }} onClick={() => setEditingItem({ type: 'ad', item: ad, campaignId: c.id })}>
+                                                  ✏️ Edit
+                                                </button>
+                                                <button className="btn btn--secondary btn--sm" style={{ fontSize: 11, padding: '3px 8px' }} onClick={() => toggleAdStatus(c.id, ad)}>
+                                                  {ad.status === 'ACTIVE' ? '⏸ Pause' : '▶ Resume'}
+                                                </button>
+                                              </div>
                                             </div>
-
-                                            {(cr.title || cr.body) && (
-                                              <div style={{ marginTop: 8, background: 'rgba(255,255,255,0.03)', padding: '6px 8px', borderRadius: 4 }}>
-                                                {cr.title && <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--clr-text)' }}>{cr.title}</div>}
-                                                {cr.body && (
-                                                  <div style={{ fontSize: 11, color: 'var(--clr-text-2)', marginTop: 2, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-                                                    {cr.body}
-                                                  </div>
-                                                )}
-                                              </div>
-                                            )}
-
-                                            {cr.call_to_action_type && (
-                                              <div style={{ marginTop: 6, fontSize: 11, color: 'var(--clr-primary)', fontWeight: 600 }}>
-                                                CTA: {cr.call_to_action_type}
-                                              </div>
-                                            )}
-                                          </div>
-
-                                          <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', marginTop: 10, borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: 8 }}>
-                                            <button
-                                              className="btn btn--secondary btn--sm"
-                                              style={{ fontSize: 11, padding: '2px 8px' }}
-                                              onClick={() => setEditingItem({ type: 'ad', item: ad, campaignId: c.id })}
-                                            >
-                                              ✏️ Edit
-                                            </button>
-                                            <button
-                                              className="btn btn--secondary btn--sm"
-                                              style={{ fontSize: 11, padding: '2px 8px' }}
-                                              onClick={() => toggleAdStatus(c.id, ad)}
-                                            >
-                                              {ad.status === 'ACTIVE' ? '⏸ Pause' : '▶ Resume'}
-                                            </button>
-                                            <button
-                                              className="btn btn--danger btn--sm"
-                                              style={{ fontSize: 11, padding: '2px 8px' }}
-                                              onClick={() => handleDeleteAd(c.id, ad)}
-                                            >
-                                              ✕
-                                            </button>
-                                          </div>
+                                          ))}
                                         </div>
-                                      );
-                                    })}
-                                  </div>
-                                )}
-                              </div>
+                                      </div>
+                                    );
+                                  })()}
+                                </>
+                              )}
                             </div>
                           )}
                         </td>
@@ -942,11 +1054,13 @@ function CampaignsTab({ account, onRefresh }) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  MODAL: EDIT ENTITY (Campaign, AdSet, Ad)
+//  MODAL: EDIT ENTITY (Campaign, AdSet, Ad & Creative)
 // ═══════════════════════════════════════════════════════════════
 
 function EditEntityModal({ target, currency, onClose, onSaved }) {
-  const { type, item } = target;
+  const { type, item, adset } = target;
+  
+  // General
   const [name, setName] = useState(item.name || '');
   const [status, setStatus] = useState(item.status || 'ACTIVE');
   const [budget, setBudget] = useState(
@@ -956,8 +1070,64 @@ function EditEntityModal({ target, currency, onClose, onSaved }) {
       ? (parseInt(item.daily_budget) / 100).toString()
       : ''
   );
+
+  // AdSet Targeting State
+  const initialTargeting = item.targeting || {};
+  const [country, setCountry] = useState(initialTargeting.geo_locations?.countries?.[0] || 'IN');
+  const [ageMin, setAgeMin] = useState(initialTargeting.age_min || 18);
+  const [ageMax, setAgeMax] = useState(initialTargeting.age_max || 65);
+  const [gender, setGender] = useState(initialTargeting.genders?.[0] !== undefined ? initialTargeting.genders[0] : 0);
+  
+  // Extract initial interests
+  const extractedInterests = [];
+  if (initialTargeting.flexible_spec) {
+    initialTargeting.flexible_spec.forEach(spec => {
+      if (spec.interests) spec.interests.forEach(i => extractedInterests.push(i));
+    });
+  } else if (initialTargeting.interests) {
+    initialTargeting.interests.forEach(i => extractedInterests.push(i));
+  }
+  const [interests, setInterests] = useState(extractedInterests);
+  const [interestQuery, setInterestQuery] = useState('');
+  const [interestSuggestions, setInterestSuggestions] = useState([]);
+  const [searchingInterests, setSearchingInterests] = useState(false);
+
+  // Ad Creative State
+  const initialCr = item.creative || {};
+  const [headline, setHeadline] = useState(initialCr.title || initialCr.object_story_spec?.link_data?.name || initialCr.name || '');
+  const [body, setBody] = useState(initialCr.body || initialCr.object_story_spec?.link_data?.message || '');
+  const [description, setDescription] = useState(initialCr.object_story_spec?.link_data?.description || '');
+  const [cta, setCta] = useState(initialCr.call_to_action_type || 'WHATSAPP_MESSAGE');
+  const [whatsappNumber, setWhatsappNumber] = useState(initialCr.object_story_spec?.link_data?.call_to_action?.value?.whatsapp_number || '');
+  const [imageFile, setImageFile] = useState(null);
+  const [imagePreview, setImagePreview] = useState(initialCr.image_url || initialCr.thumbnail_url || null);
+
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+
+  // Search Meta interests
+  async function handleSearchInterests(q) {
+    setInterestQuery(q);
+    if (!q || q.length < 2) { setInterestSuggestions([]); return; }
+    setSearchingInterests(true);
+    try {
+      const data = await searchInterests(q);
+      setInterestSuggestions(data.interests || []);
+    } catch {
+      setInterestSuggestions([]);
+    } finally {
+      setSearchingInterests(false);
+    }
+  }
+
+  function handleImageChange(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImageFile(file);
+    const reader = new FileReader();
+    reader.onload = () => setImagePreview(reader.result);
+    reader.readAsDataURL(file);
+  }
 
   async function handleSave(e) {
     e.preventDefault();
@@ -970,11 +1140,31 @@ function EditEntityModal({ target, currency, onClose, onSaved }) {
         if (budget) payload.daily_budget = Math.round(parseFloat(budget) * 100);
         await updateCampaign(item.id, payload);
       } else if (type === 'adset') {
-        const payload = { name: name.trim(), status };
-        if (budget) payload.daily_budget = budget;
+        const payload = {
+          name: name.trim(),
+          status,
+          daily_budget: budget || undefined,
+          targeting: {
+            countries: [country],
+            age_min: parseInt(ageMin) || 18,
+            age_max: parseInt(ageMax) || 65,
+            genders: [parseInt(gender)],
+            interests: interests.map(i => ({ id: i.id, name: i.name })),
+          }
+        };
         await updateAdSet(item.id, payload);
       } else if (type === 'ad') {
-        await updateAd(item.id, { name: name.trim(), status });
+        const payload = {
+          name: name.trim(),
+          status,
+          headline: headline.trim(),
+          body: body.trim(),
+          description: description.trim(),
+          call_to_action_type: cta,
+          whatsapp_number: whatsappNumber.trim() || undefined,
+          image_base64: imageFile && imagePreview && imagePreview.startsWith('data:') ? imagePreview : undefined,
+        };
+        await updateAd(item.id, payload);
       }
       onSaved();
     } catch (err) {
@@ -986,19 +1176,20 @@ function EditEntityModal({ target, currency, onClose, onSaved }) {
 
   return (
     <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal-box" style={{ maxWidth: 440 }}>
+      <div className="modal-box" style={{ maxWidth: type === 'ad' || type === 'adset' ? 620 : 440 }}>
         <div className="modal-title">
-          ✏️ Edit {type === 'campaign' ? 'Campaign' : type === 'adset' ? 'Ad Set' : 'Ad'}
+          ✏️ Edit {type === 'campaign' ? 'Campaign' : type === 'adset' ? 'Ad Set & Audience' : 'Ad & Creative'}
         </div>
         <div style={{ fontSize: 11, color: 'var(--clr-text-3)', marginTop: -14, marginBottom: 16 }}>
-          ID: {item.id}
+          ID: <code>{item.id}</code>
         </div>
 
-        {error && <div className="alert alert--error">{error}</div>}
+        {error && <div className="alert alert--error" style={{ marginBottom: 12 }}>{error}</div>}
 
         <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {/* General Fields */}
           <div className="form-group">
-            <label className="form-label">Name</label>
+            <label className="form-label">{type === 'ad' ? 'Ad Name' : type === 'adset' ? 'Ad Set Name' : 'Campaign Name'} *</label>
             <input
               className="form-input"
               value={name}
@@ -1007,38 +1198,193 @@ function EditEntityModal({ target, currency, onClose, onSaved }) {
             />
           </div>
 
-          {(type === 'adset' || (type === 'campaign' && item.budget_type === 'daily')) && (
+          <div style={{ display: 'grid', gridTemplateColumns: (type === 'adset' || (type === 'campaign' && item.budget_type === 'daily')) ? '1fr 1fr' : '1fr', gap: 12 }}>
             <div className="form-group">
-              <label className="form-label">Daily Budget ({currency || 'INR'})</label>
-              <input
-                className="form-input"
-                type="number"
-                step="1"
-                min="50"
-                placeholder="e.g. 500"
-                value={budget}
-                onChange={e => setBudget(e.target.value)}
-              />
-              <span style={{ fontSize: 10, color: 'var(--clr-text-3)' }}>
-                Updates daily budget directly on Meta
-              </span>
+              <label className="form-label">Status</label>
+              <select className="form-input" value={status} onChange={e => setStatus(e.target.value)}>
+                <option value="ACTIVE">🟢 Active</option>
+                <option value="PAUSED">⏸ Paused</option>
+              </select>
+            </div>
+
+            {(type === 'adset' || (type === 'campaign' && item.budget_type === 'daily')) && (
+              <div className="form-group">
+                <label className="form-label">Daily Budget ({currency || 'INR'})</label>
+                <input
+                  className="form-input"
+                  type="number"
+                  step="1"
+                  min="50"
+                  placeholder="e.g. 500"
+                  value={budget}
+                  onChange={e => setBudget(e.target.value)}
+                />
+              </div>
+            )}
+          </div>
+
+          {/* ════ AD SET TARGETING EDIT CONTROLS ════ */}
+          {type === 'adset' && (
+            <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--clr-border)', borderRadius: 8, padding: 14, display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--clr-text)', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: 6 }}>
+                🎯 Audience & Targeting Controls
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+                <div className="form-group">
+                  <label className="form-label">Country</label>
+                  <select className="form-input" value={country} onChange={e => setCountry(e.target.value)}>
+                    {COUNTRIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Min Age</label>
+                  <input className="form-input" type="number" min="18" max="65" value={ageMin} onChange={e => setAgeMin(e.target.value)} />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Max Age</label>
+                  <input className="form-input" type="number" min="18" max="65" value={ageMax} onChange={e => setAgeMax(e.target.value)} />
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Gender</label>
+                <select className="form-input" value={gender} onChange={e => setGender(parseInt(e.target.value))}>
+                  <option value={0}>All Genders</option>
+                  <option value={1}>Men Only</option>
+                  <option value={2}>Women Only</option>
+                </select>
+              </div>
+
+              {/* Interests Picker */}
+              <div className="form-group" style={{ position: 'relative' }}>
+                <label className="form-label">🎯 Detailed Interests Targeting</label>
+                <input
+                  className="form-input"
+                  placeholder="Search interests e.g. Healthcare, Software, Education..."
+                  value={interestQuery}
+                  onChange={e => handleSearchInterests(e.target.value)}
+                />
+                {interestSuggestions.length > 0 && (
+                  <div style={{
+                    position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 10,
+                    background: 'var(--clr-surface)', border: '1px solid var(--clr-border)',
+                    borderRadius: 8, maxHeight: 150, overflowY: 'auto', boxShadow: '0 8px 24px rgba(0,0,0,.4)'
+                  }}>
+                    {interestSuggestions.map(item => (
+                      <div
+                        key={item.id}
+                        onClick={() => {
+                          if (!interests.some(i => i.id === item.id)) {
+                            setInterests(prev => [...prev, { id: item.id, name: item.name }]);
+                          }
+                          setInterestQuery('');
+                          setInterestSuggestions([]);
+                        }}
+                        style={{ padding: '8px 12px', fontSize: 12, cursor: 'pointer', borderBottom: '1px solid rgba(255,255,255,.05)' }}
+                        onMouseEnter={e => e.currentTarget.style.background = 'rgba(37,211,102,.1)'}
+                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                      >
+                        <strong>{item.name}</strong> <span style={{ color: 'var(--clr-text-3)', fontSize: 10 }}>({item.topic || 'Interest'})</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {interests.length > 0 && (
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
+                    {interests.map(item => (
+                      <span key={item.id} className="badge badge--green" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '3px 8px', fontSize: 11 }}>
+                        🎯 {item.name}
+                        <button type="button" onClick={() => setInterests(interests.filter(i => i.id !== item.id))} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', fontSize: 11, padding: 0 }}>✕</button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
-          <div className="form-group">
-            <label className="form-label">Status</label>
-            <select className="form-input" value={status} onChange={e => setStatus(e.target.value)}>
-              <option value="ACTIVE">🟢 Active</option>
-              <option value="PAUSED">⏸ Paused</option>
-            </select>
-          </div>
+          {/* ════ AD CREATIVE & COPY EDIT CONTROLS ════ */}
+          {type === 'ad' && (
+            <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--clr-border)', borderRadius: 8, padding: 14, display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--clr-text)', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: 6 }}>
+                🎨 Ad Creative, Headline & Copy
+              </div>
 
-          <div className="modal-footer" style={{ marginTop: 12 }}>
+              <div className="form-group">
+                <label className="form-label">Headline (Short & catchy)</label>
+                <input
+                  className="form-input"
+                  placeholder="e.g. Launch Your Mobile App in 15 Days"
+                  value={headline}
+                  onChange={e => setHeadline(e.target.value)}
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Primary Text (Ad Body Copy)</label>
+                <textarea
+                  className="form-input"
+                  rows={4}
+                  placeholder="Write your ad copy/message..."
+                  value={body}
+                  onChange={e => setBody(e.target.value)}
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div className="form-group">
+                  <label className="form-label">Description (Optional)</label>
+                  <input
+                    className="form-input"
+                    placeholder="e.g. Chat with our experts"
+                    value={description}
+                    onChange={e => setDescription(e.target.value)}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Call To Action (CTA)</label>
+                  <select className="form-input" value={cta} onChange={e => setCta(e.target.value)}>
+                    <option value="WHATSAPP_MESSAGE">💬 Send WhatsApp Message</option>
+                    <option value="LEARN_MORE">📖 Learn More</option>
+                    <option value="GET_QUOTE">💰 Get Quote</option>
+                    <option value="CONTACT_US">📞 Contact Us</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Destination WhatsApp Phone Number</label>
+                <input
+                  className="form-input"
+                  placeholder="e.g. +91 70426 03342"
+                  value={whatsappNumber}
+                  onChange={e => setWhatsappNumber(e.target.value)}
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Replace Creative Image (Optional)</label>
+                <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                  {imagePreview && (
+                    <img src={imagePreview} alt="Preview" style={{ width: 60, height: 60, borderRadius: 6, objectFit: 'cover', border: '1px solid var(--clr-border)' }} />
+                  )}
+                  <input type="file" accept="image/*" onChange={handleImageChange} style={{ fontSize: 12 }} />
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="modal-footer" style={{ marginTop: 8 }}>
             <button type="button" className="btn btn--ghost" onClick={onClose}>
               Cancel
             </button>
             <button type="submit" className="btn btn--primary" disabled={saving}>
-              {saving ? 'Saving...' : '💾 Save Changes'}
+              {saving ? 'Saving...' : '💾 Save Changes to Meta'}
             </button>
           </div>
         </form>

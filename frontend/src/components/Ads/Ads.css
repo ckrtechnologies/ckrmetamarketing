@@ -187,58 +187,101 @@
 
 /* ── Nested Ad Sets & Ads Hierarchy ──────────────────────────── */
 .nested-tree-container {
-  background: rgba(0, 0, 0, 0.2);
+  background: rgba(0, 0, 0, 0.25);
   border: 1px solid var(--clr-border);
   border-radius: var(--radius-md);
-  padding: 18px 20px;
+  padding: 20px;
   margin: 8px 0;
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 20px;
 }
 
-.nested-section-title {
+.nested-adset-card {
+  background: var(--clr-surface);
+  border: 1px solid var(--clr-border);
+  border-radius: var(--radius-md);
+  padding: 16px 18px;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--clr-text);
-  margin-bottom: 10px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-  padding-bottom: 6px;
+  flex-direction: column;
+  gap: 14px;
+  transition: border-color 0.15s;
+}
+.nested-adset-card:hover {
+  border-color: rgba(37, 211, 102, 0.3);
 }
 
-.nested-grid {
+.nested-adset-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.audience-meta-box {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.audience-tag-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.audience-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--clr-text-2);
+}
+.audience-pill--green { background: rgba(37, 211, 102, 0.12); color: #25d366; }
+.audience-pill--blue  { background: rgba(24, 119, 242, 0.12); color: #1877f2; }
+.audience-pill--purple { background: rgba(120, 86, 255, 0.12); color: #a78bfa; }
+
+.nested-ads-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
   gap: 12px;
 }
 
-.nested-item-card {
-  background: var(--clr-surface);
+.nested-ad-card {
+  background: var(--clr-surface-2);
   border: 1px solid var(--clr-border);
-  border-radius: var(--radius-sm);
-  padding: 12px 14px;
+  border-radius: 8px;
+  padding: 14px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  gap: 8px;
-  transition: border-color 0.15s;
+  gap: 10px;
 }
-.nested-item-card:hover {
+.nested-ad-card:hover {
   border-color: var(--clr-primary-bd);
 }
 
 .nested-ad-preview-thumb {
-  width: 54px;
-  height: 54px;
-  border-radius: var(--radius-sm);
+  width: 64px;
+  height: 64px;
+  border-radius: 6px;
   object-fit: cover;
   border: 1px solid var(--clr-border);
   background: #000;
   flex-shrink: 0;
 }
+
 
 /* ── WhatsApp Ad Preview ─────────────────────────────────────── */
 .wa-ad-preview {

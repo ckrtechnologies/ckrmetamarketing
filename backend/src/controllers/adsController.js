@@ -265,17 +265,34 @@ async function updateAdSet(req, res) {
     const updates = {};
     if (req.body.name) updates.name = req.body.name.trim();
     if (req.body.status) updates.status = req.body.status;
-    if (req.body.daily_budget !== undefined) {
+    if (req.body.daily_budget !== undefined && req.body.daily_budget !== '') {
       updates.daily_budget = Math.round(parseFloat(req.body.daily_budget) * 100);
     }
-    if (req.body.lifetime_budget !== undefined) {
+    if (req.body.lifetime_budget !== undefined && req.body.lifetime_budget !== '') {
       updates.lifetime_budget = Math.round(parseFloat(req.body.lifetime_budget) * 100);
+    }
+
+    // Full Targeting updates
+    if (req.body.targeting) {
+      const t = req.body.targeting;
+      updates.targeting = {
+        geo_locations: t.countries ? { countries: t.countries } : (t.geo_locations || { countries: ['IN'] }),
+        age_min: parseInt(t.age_min) || 18,
+        age_max: parseInt(t.age_max) || 65,
+        genders: t.genders || [0],
+        ...(t.device_platforms?.length ? { device_platforms: t.device_platforms } : {}),
+        ...(t.publisher_platforms?.length ? { publisher_platforms: t.publisher_platforms } : {}),
+        ...(t.interests?.length ? {
+          flexible_spec: [{ interests: t.interests.map(i => ({ id: i.id, name: i.name })) }],
+        } : {}),
+      };
     }
 
     const result = await metaAds.updateAdSet(account.access_token, req.params.id, updates);
     res.json({ success: true, adset_id: req.params.id, updates, result });
   } catch (err) {
     const detail = err.response?.data?.error?.message || err.message;
+    console.error('[updateAdSet]', detail, err.response?.data);
     res.status(400).json({ error: detail });
   }
 }
@@ -316,10 +333,37 @@ async function updateAd(req, res) {
     if (req.body.name) updates.name = req.body.name.trim();
     if (req.body.status) updates.status = req.body.status;
 
+    // If creative content (headline, body, description, CTA, image) is updated, create new creative
+    if (req.body.headline !== undefined || req.body.body !== undefined || req.body.image_base64 || req.body.whatsapp_number) {
+      let imageHash = req.body.image_hash;
+      if (req.body.image_base64) {
+        const uploadRes = await metaAds.uploadImage(account.access_token, account.act_id, req.body.image_base64);
+        if (uploadRes?.hash) imageHash = uploadRes.hash;
+      }
+
+      const page_id = req.body.page_id || req.body.current_page_id;
+      const cleanPhone = req.body.whatsapp_number ? String(req.body.whatsapp_number).replace(/\D/g, '') : '';
+      const formattedPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
+
+      const newCreative = await metaAds.createCreative(account.access_token, account.act_id, {
+        name: `${req.body.name || 'Ad'} — Creative (${Date.now()})`,
+        page_id: page_id || '461194823752748',
+        headline: req.body.headline || '',
+        body: req.body.body || '',
+        description: req.body.description || '',
+        image_hash: imageHash,
+        call_to_action_type: req.body.call_to_action_type || 'WHATSAPP_MESSAGE',
+        whatsapp_number: formattedPhone,
+      });
+
+      updates.creative = { creative_id: newCreative.id };
+    }
+
     const result = await metaAds.updateAd(account.access_token, req.params.id, updates);
     res.json({ success: true, ad_id: req.params.id, updates, result });
   } catch (err) {
     const detail = err.response?.data?.error?.message || err.message;
+    console.error('[updateAd]', detail, err.response?.data);
     res.status(400).json({ error: detail });
   }
 }
