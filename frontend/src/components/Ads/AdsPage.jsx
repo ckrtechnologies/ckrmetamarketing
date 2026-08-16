@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  listAdAccounts, connectAdAccount, disconnectAdAccount, fetchMetaAccounts,
+  listAdAccounts, connectAdAccount, disconnectAdAccount, fetchMetaAccounts, setActiveAdAccount,
   listCampaigns, createCampaign, updateCampaign, deleteCampaign,
   getAccountInsights, getCampaignInsights, getAccountBalance,
   listAdSets, updateAdSet, deleteAdSet,
@@ -105,6 +105,19 @@ export default function AdsPage() {
     finally { setLoadingAccounts(false); }
   }
 
+  async function handleSwitchAccount(accountId) {
+    if (!accountId || (activeAccount && activeAccount.id === accountId)) return;
+    setError('');
+    setLoadingAccounts(true);
+    try {
+      await setActiveAdAccount(accountId);
+      await loadAccounts();
+    } catch (e) {
+      setError('Failed to switch ad account: ' + e.message);
+      setLoadingAccounts(false);
+    }
+  }
+
   const tabs = [
     { key: 'overview',   label: '📊 Overview' },
     { key: 'campaigns',  label: '📣 Campaigns' },
@@ -121,7 +134,7 @@ export default function AdsPage() {
           <p>Create, publish, and track your Meta ad campaigns</p>
         </div>
         {activeAccount && (
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
             {accountBalance?.available_balance_str ? (
               <div className="ads-account-chip" style={{ background: 'rgba(37, 211, 102, 0.15)', color: '#25d366', borderColor: 'rgba(37, 211, 102, 0.35)', fontWeight: 700 }}>
                 💳 Balance: <strong>₹{accountBalance.available_balance_str}</strong>
@@ -138,8 +151,20 @@ export default function AdsPage() {
               </div>
             )}
 
-            <div className="ads-account-chip">
-              ✅ {activeAccount.name} ({activeAccount.act_id}) — {activeAccount.currency}
+            {/* Quick Switcher Dropdown */}
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'var(--clr-surface)', border: '1px solid var(--clr-border)', borderRadius: '20px', padding: '3px 12px 3px 10px', boxShadow: '0 2px 8px rgba(0,0,0,.2)' }}>
+              <span style={{ fontSize: 13 }}>🏢</span>
+              <select
+                style={{ background: 'transparent', border: 'none', color: 'var(--clr-text)', fontWeight: 700, fontSize: 12, cursor: 'pointer', outline: 'none' }}
+                value={activeAccount?.id || ''}
+                onChange={e => handleSwitchAccount(e.target.value)}
+              >
+                {accounts.map(a => (
+                  <option key={a.id} value={a.id} style={{ background: '#1c1e21', color: '#fff' }}>
+                    {a.name || 'Unnamed'} ({a.act_id}) {a.id === activeAccount?.id ? '✓ Active' : ''}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
         )}
@@ -176,7 +201,7 @@ export default function AdsPage() {
       {tab === 'campaigns' && <CampaignsTab account={activeAccount} onRefresh={loadAccounts} />}
       {tab === 'create'    && <CreateAdTab  account={activeAccount} accounts={accounts} onSuccess={(msg) => { setSuccess(msg); setTab('campaigns'); }} />}
       {tab === 'audiences' && <AudiencesTab account={activeAccount} />}
-      {tab === 'accounts'  && <AccountsTab accounts={accounts} onRefresh={loadAccounts} accountBalance={accountBalance} />}
+      {tab === 'accounts'  && <AccountsTab accounts={accounts} onRefresh={loadAccounts} onSwitchAccount={handleSwitchAccount} accountBalance={accountBalance} />}
     </div>
   );
 }
@@ -2547,7 +2572,7 @@ function AudiencesTab({ account }) {
 //  TAB: AD ACCOUNTS MANAGEMENT
 // ═══════════════════════════════════════════════════════════════
 
-function AccountsTab({ accounts, onRefresh, accountBalance }) {
+function AccountsTab({ accounts, onRefresh, onSwitchAccount, accountBalance }) {
   const [showConnect,   setShowConnect]   = useState(false);
   const [accessToken,   setAccessToken]   = useState('');
   const [actId,         setActId]         = useState('');
@@ -2668,17 +2693,36 @@ function AccountsTab({ accounts, onRefresh, accountBalance }) {
               <tr><th>Account</th><th>ID</th><th>Currency</th><th>Status</th><th style={{ textAlign: 'right' }}>Actions</th></tr>
             </thead>
             <tbody>
-              {accounts.map(a => (
-                <tr key={a.id}>
-                  <td style={{ fontWeight: 600 }}>{a.name || 'Unnamed'}</td>
-                  <td style={{ fontFamily: 'monospace', fontSize: 12 }}>{a.act_id}</td>
-                  <td>{a.currency}</td>
-                  <td>{a.is_active ? <span className="badge badge--green">Active</span> : <span className="badge badge--gray">Inactive</span>}</td>
-                  <td style={{ textAlign: 'right' }}>
-                    <button className="btn btn--danger btn--sm" onClick={() => handleDisconnect(a.id)} style={{ fontSize: 11, padding: '3px 8px' }}>Disconnect</button>
-                  </td>
-                </tr>
-              ))}
+              {accounts.map(a => {
+                const isActive = a.id === activeAcc?.id || a.is_active;
+
+                return (
+                  <tr key={a.id} style={{ background: isActive ? 'rgba(37,211,102,.03)' : undefined }}>
+                    <td style={{ fontWeight: 600 }}>
+                      {a.name || 'Unnamed'}
+                      {isActive && <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--clr-primary)' }}>(Current Active)</span>}
+                    </td>
+                    <td style={{ fontFamily: 'monospace', fontSize: 12 }}>{a.act_id}</td>
+                    <td>{a.currency}</td>
+                    <td>
+                      {isActive ? (
+                        <span className="badge badge--green">✓ Active</span>
+                      ) : (
+                        <button
+                          className="btn btn--secondary btn--sm"
+                          style={{ fontSize: 11, padding: '2px 8px' }}
+                          onClick={() => onSwitchAccount && onSwitchAccount(a.id)}
+                        >
+                          👉 Switch to this
+                        </button>
+                      )}
+                    </td>
+                    <td style={{ textAlign: 'right' }}>
+                      <button className="btn btn--danger btn--sm" onClick={() => handleDisconnect(a.id)} style={{ fontSize: 11, padding: '3px 8px' }}>Disconnect</button>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

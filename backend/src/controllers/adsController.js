@@ -62,6 +62,15 @@ async function connectAdAccount(req, res) {
   }
 }
 
+async function setActiveAdAccount(req, res) {
+  try {
+    const account = await adsRepo.setActiveAdAccount(req.orgId, req.params.id);
+    res.json({ success: true, account });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+}
+
 async function updateAdAccount(req, res) {
   try {
     const account = await adsRepo.updateAdAccount(req.orgId, req.params.id, req.body);
@@ -733,7 +742,7 @@ async function publishCampaign(req, res) {
 }
 
 module.exports = {
-  listAdAccounts, connectAdAccount, updateAdAccount, disconnectAdAccount, listMetaAdAccounts,
+  listAdAccounts, connectAdAccount, setActiveAdAccount, updateAdAccount, disconnectAdAccount, listMetaAdAccounts,
   listPages,
   listCampaigns, createCampaign, updateCampaign, deleteCampaign, publishCampaign,
   listAdSets, createAdSet, updateAdSet, deleteAdSet,

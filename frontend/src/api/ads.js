@@ -4,6 +4,7 @@ import { apiCall } from './auth.js';
 export const listAdAccounts    = ()               => apiCall('GET',    '/v2/ads/accounts');
 export const fetchMetaAccounts = (access_token)   => apiCall('GET',    `/v2/ads/meta-accounts?access_token=${encodeURIComponent(access_token)}`);
 export const connectAdAccount  = (data)           => apiCall('POST',   '/v2/ads/accounts', data);
+export const setActiveAdAccount = (id)            => apiCall('POST',   `/v2/ads/accounts/${id}/activate`);
 export const updateAdAccount   = (id, data)       => apiCall('PATCH',  `/v2/ads/accounts/${id}`, data);
 export const disconnectAdAccount = (id)           => apiCall('DELETE', `/v2/ads/accounts/${id}`);
 

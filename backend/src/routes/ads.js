@@ -3,10 +3,11 @@ const { authenticate } = require('../middleware/auth');
 const ctrl = require('../controllers/adsController');
 
 // ── Ad Accounts ─────────────────────────────────────────────────
-router.get('/accounts',          authenticate, ctrl.listAdAccounts);
-router.post('/accounts',         authenticate, ctrl.connectAdAccount);
-router.patch('/accounts/:id',    authenticate, ctrl.updateAdAccount);
-router.delete('/accounts/:id',   authenticate, ctrl.disconnectAdAccount);
+router.get('/accounts',              authenticate, ctrl.listAdAccounts);
+router.post('/accounts',             authenticate, ctrl.connectAdAccount);
+router.post('/accounts/:id/activate', authenticate, ctrl.setActiveAdAccount);
+router.patch('/accounts/:id',        authenticate, ctrl.updateAdAccount);
+router.delete('/accounts/:id',       authenticate, ctrl.disconnectAdAccount);
 
 // Fetch ad accounts from Meta (for connect flow)
 router.get('/meta-accounts',     authenticate, ctrl.listMetaAdAccounts);
