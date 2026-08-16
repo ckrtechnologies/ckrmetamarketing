@@ -45,4 +45,6 @@ export const createLookalikeAudience  = (data)           => apiCall('POST',   '/
 export const createSavedAudience      = (data)           => apiCall('POST',   '/v2/ads/audiences/saved', data);
 export const deleteAudience           = (id)             => apiCall('DELETE', `/v2/ads/audiences/${id}`);
 export const searchInterests          = (q)             => apiCall('GET',    `/v2/ads/interests?q=${encodeURIComponent(q)}`);
+export const searchGeoLocations       = (q, types)      => apiCall('GET',    `/v2/ads/search/geo?q=${encodeURIComponent(q)}${types ? '&types=' + encodeURIComponent(JSON.stringify(types)) : ''}`);
+export const searchTargetingCategories = (q, cls)       => apiCall('GET',    `/v2/ads/search/targeting?q=${encodeURIComponent(q || '')}&class=${encodeURIComponent(cls || 'interests')}`);
 

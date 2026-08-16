@@ -435,8 +435,6 @@ async function deleteAudience(accessToken, audienceId) {
   return r.data;
 }
 
-// ── Interests Search ──────────────────────────────────────────
-
 async function searchInterests(accessToken, query) {
   if (!query) return [];
   const r = await client(accessToken).get('/search', {
@@ -447,6 +445,38 @@ async function searchInterests(accessToken, query) {
       limit: 25,
     },
   });
+  return r.data?.data || [];
+}
+
+async function searchGeoLocations(accessToken, query, locationTypes = ['city', 'region', 'country', 'zip']) {
+  if (!query) return [];
+  const r = await client(accessToken).get('/search', {
+    params: {
+      access_token: accessToken,
+      type: 'adgeolocation',
+      q: query,
+      location_types: JSON.stringify(locationTypes),
+      limit: 25,
+    },
+  });
+  return r.data?.data || [];
+}
+
+async function searchTargetingCategories(accessToken, query, categoryClass = 'interests') {
+  const params = {
+    access_token: accessToken,
+    limit: 30,
+  };
+  if (categoryClass === 'interests' || !categoryClass) {
+    if (!query) return [];
+    params.type = 'adinterest';
+    params.q = query;
+  } else {
+    params.type = 'adTargetingCategory';
+    params.class = categoryClass;
+    if (query) params.q = query;
+  }
+  const r = await client(accessToken).get('/search', { params });
   return r.data?.data || [];
 }
 
@@ -488,7 +518,7 @@ module.exports = {
   getCampaignInsights, getAccountInsights,
   listCustomAudiences, listSavedAudiences,
   createCustomAudience, uploadUsersToAudience, createLookalikeAudience, createSavedAudience, deleteAudience,
-  searchInterests,
+  searchInterests, searchGeoLocations, searchTargetingCategories,
   listPages, uploadImage,
 };
 

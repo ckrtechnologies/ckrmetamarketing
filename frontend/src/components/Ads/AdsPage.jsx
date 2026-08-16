@@ -5,7 +5,8 @@ import {
   getAccountInsights, getCampaignInsights, getAccountBalance,
   listAdSets, updateAdSet, deleteAdSet,
   listAds, updateAd, deleteAd,
-  listAudiences, createCustomAudience, createLookalikeAudience, createSavedAudience, deleteAudience, searchInterests,
+  listAudiences, createCustomAudience, createLookalikeAudience, createSavedAudience, deleteAudience,
+  searchInterests, searchGeoLocations, searchTargetingCategories,
   listPages,
   publishCampaign,
 } from '../../api/ads.js';
@@ -17,6 +18,48 @@ import {
 import './Ads.css';
 
 // ── Constants ─────────────────────────────────────────────────────
+
+const INDIAN_METRO_PRESETS = [
+  { key: 'pan_india', label: '🇮🇳 Pan-India', countries: ['IN'], cities: [] },
+  { key: 'delhi_ncr', label: '🏙️ Delhi NCR', countries: ['IN'], cities: [{ key: '1023040', name: 'Delhi', radius: 40, distance_unit: 'kilometer' }, { key: '1088469', name: 'Noida', radius: 25, distance_unit: 'kilometer' }, { key: '1087413', name: 'Gurgaon', radius: 25, distance_unit: 'kilometer' }] },
+  { key: 'mumbai', label: '🌊 Mumbai (MMR)', countries: ['IN'], cities: [{ key: '1061347', name: 'Mumbai', radius: 40, distance_unit: 'kilometer' }, { key: '1089201', name: 'Thane', radius: 25, distance_unit: 'kilometer' }, { key: '1088421', name: 'Navi Mumbai', radius: 25, distance_unit: 'kilometer' }] },
+  { key: 'bengaluru', label: '💻 Bengaluru', countries: ['IN'], cities: [{ key: '1060935', name: 'Bengaluru', radius: 40, distance_unit: 'kilometer' }] },
+  { key: 'hyderabad', label: '💎 Hyderabad', countries: ['IN'], cities: [{ key: '1061144', name: 'Hyderabad', radius: 40, distance_unit: 'kilometer' }] },
+  { key: 'pune', label: '🚀 Pune', countries: ['IN'], cities: [{ key: '1061405', name: 'Pune', radius: 40, distance_unit: 'kilometer' }] },
+  { key: 'kolkata', label: '🏛️ Kolkata', countries: ['IN'], cities: [{ key: '1061266', name: 'Kolkata', radius: 40, distance_unit: 'kilometer' }] },
+  { key: 'chennai', label: '🏭 Chennai', countries: ['IN'], cities: [{ key: '1061019', name: 'Chennai', radius: 40, distance_unit: 'kilometer' }] },
+  { key: 'ahmedabad', label: '🏛️ Ahmedabad', countries: ['IN'], cities: [{ key: '1060905', name: 'Ahmedabad', radius: 40, distance_unit: 'kilometer' }] },
+  { key: 'jaipur', label: '🏰 Jaipur', countries: ['IN'], cities: [{ key: '1061205', name: 'Jaipur', radius: 40, distance_unit: 'kilometer' }] },
+  { key: 'chandigarh', label: '🏙️ Chandigarh', countries: ['IN'], cities: [{ key: '1061017', name: 'Chandigarh', radius: 30, distance_unit: 'kilometer' }] },
+  { key: 'lucknow', label: '🕌 Lucknow', countries: ['IN'], cities: [{ key: '1061304', name: 'Lucknow', radius: 30, distance_unit: 'kilometer' }] },
+  { key: 'indore', label: '🌆 Indore', countries: ['IN'], cities: [{ key: '1061184', name: 'Indore', radius: 30, distance_unit: 'kilometer' }] },
+];
+
+const TARGET_LANGUAGES = [
+  { key: 'en', label: 'English', locale: 1001 },
+  { key: 'hi', label: 'Hindi (हिंदी)', locale: 1002 },
+  { key: 'bn', label: 'Bengali (বাংলা)', locale: 1003 },
+  { key: 'mr', label: 'Marathi (मराठी)', locale: 1004 },
+  { key: 'ta', label: 'Tamil (தமிழ்)', locale: 1005 },
+  { key: 'te', label: 'Telugu (తెలుగు)', locale: 1006 },
+  { key: 'gu', label: 'Gujarati (ગુજરાતી)', locale: 1007 },
+  { key: 'kn', label: 'Kannada (ಕನ್ನಡ)', locale: 1008 },
+  { key: 'ml', label: 'Malayalam (മലയാളം)', locale: 1009 },
+  { key: 'pa', label: 'Punjabi (ਪੰਜਾਬੀ)', locale: 1010 },
+  { key: 'ur', label: 'Urdu (اردو)', locale: 1011 },
+];
+
+const POPULAR_TARGETING_CHIPS = [
+  { id: '6003260840572', name: 'Small business owners', category: 'Behavior' },
+  { id: '6003139266710', name: 'School (education)', category: 'Interest' },
+  { id: '6002714895372', name: 'Frequent international travelers', category: 'Behavior' },
+  { id: '6003348633372', name: 'People who prefer high-value goods in India', category: 'Behavior' },
+  { id: '6003017260572', name: 'Engaged Shoppers', category: 'Behavior' },
+  { id: '6002979192120', name: 'Real estate investment', category: 'Interest' },
+  { id: '6003184643710', name: 'Artificial intelligence (computing)', category: 'Interest' },
+  { id: '6003139266711', name: 'Software development', category: 'Interest' },
+  { id: '6003260840573', name: 'Founder, Director, CEO', category: 'Job Title' },
+];
 
 const OBJECTIVES = [
   { key: 'OUTCOME_ENGAGEMENT', icon: '💬', name: 'WhatsApp Conversations', desc: 'Users click your ad and open WhatsApp chat with you' },
@@ -441,6 +484,7 @@ function CampaignsTab({ account, onRefresh }) {
   const [insights,        setInsights]        = useState({});
   const [expandedTreeId,  setExpandedTreeId]  = useState(null);
   const [treeData,        setTreeData]        = useState({});
+  const [customAudiences, setCustomAudiences] = useState([]);
   const [editingItem,     setEditingItem]     = useState(null); // { type: 'campaign'|'adset'|'ad', item: obj, campaignId?: string }
 
   useEffect(() => { if (account) load(); }, [account]);
@@ -448,8 +492,12 @@ function CampaignsTab({ account, onRefresh }) {
   async function load() {
     setLoading(true); setError('');
     try {
-      const data = await listCampaigns();
-      setCampaigns(data.campaigns || []);
+      const [campData, audData] = await Promise.all([
+        listCampaigns(),
+        listAudiences().catch(() => ({ custom_audiences: [] }))
+      ]);
+      setCampaigns(campData.campaigns || []);
+      setCustomAudiences(audData.custom_audiences || audData.audiences || []);
     } catch (e) { setError(e.message); }
     finally { setLoading(false); }
   }
@@ -1127,6 +1175,7 @@ function CampaignsTab({ account, onRefresh }) {
         <EditEntityModal
           target={editingItem}
           currency={account.currency}
+          customAudiences={customAudiences}
           onClose={() => setEditingItem(null)}
           onSaved={() => {
             setEditingItem(null);
@@ -1142,11 +1191,753 @@ function CampaignsTab({ account, onRefresh }) {
 }
 
 // ═══════════════════════════════════════════════════════════════
+//  REUSABLE COMPONENT: FULL META TARGETING BUILDER
+// ═══════════════════════════════════════════════════════════════
+
+function FullTargetingBuilder({ targeting = {}, onChange, customAudiences = [], showPlacements = true }) {
+  // Locations
+  const geo = targeting.geo_locations || {};
+  const [country, setCountry] = useState(geo.countries?.[0] || 'IN');
+  const [locationType, setLocationType] = useState(geo.location_types?.[0] || 'home_and_recent');
+  const [cities, setCities] = useState(geo.cities || []);
+  const [regions, setRegions] = useState(geo.regions || []);
+  const [geoQuery, setGeoQuery] = useState('');
+  const [geoSuggestions, setGeoSuggestions] = useState([]);
+  const [searchingGeo, setSearchingGeo] = useState(false);
+
+  // Demographics
+  const [ageMin, setAgeMin] = useState(targeting.age_min || 18);
+  const [ageMax, setAgeMax] = useState(targeting.age_max || 65);
+  const [gender, setGender] = useState(targeting.genders?.[0] !== undefined ? targeting.genders[0] : 0);
+  const [locales, setLocales] = useState(targeting.locales || []);
+
+  // Detailed Targeting (Include, Narrow, Exclude)
+  const initialIncludes = [];
+  const initialNarrows = [];
+  if (targeting.flexible_spec && targeting.flexible_spec.length > 0) {
+    const mainGroup = targeting.flexible_spec[0] || {};
+    if (mainGroup.interests) mainGroup.interests.forEach(i => initialIncludes.push({ ...i, category: 'Interest' }));
+    if (mainGroup.behaviors) mainGroup.behaviors.forEach(b => initialIncludes.push({ ...b, category: 'Behavior' }));
+    if (mainGroup.work_positions) mainGroup.work_positions.forEach(w => initialIncludes.push({ ...w, category: 'Job Title' }));
+    if (mainGroup.demographics) mainGroup.demographics.forEach(d => initialIncludes.push({ ...d, category: 'Demographic' }));
+
+    if (targeting.flexible_spec.length > 1) {
+      const narrowGroup = targeting.flexible_spec[1] || {};
+      if (narrowGroup.interests) narrowGroup.interests.forEach(i => initialNarrows.push({ ...i, category: 'Interest' }));
+      if (narrowGroup.behaviors) narrowGroup.behaviors.forEach(b => initialNarrows.push({ ...b, category: 'Behavior' }));
+      if (narrowGroup.work_positions) narrowGroup.work_positions.forEach(w => initialNarrows.push({ ...w, category: 'Job Title' }));
+    }
+  } else if (targeting.interests) {
+    targeting.interests.forEach(i => initialIncludes.push({ ...i, category: 'Interest' }));
+  }
+
+  const initialExcludes = [];
+  if (targeting.exclusions) {
+    if (targeting.exclusions.interests) targeting.exclusions.interests.forEach(i => initialExcludes.push({ ...i, category: 'Interest' }));
+    if (targeting.exclusions.behaviors) targeting.exclusions.behaviors.forEach(b => initialExcludes.push({ ...b, category: 'Behavior' }));
+  }
+
+  const [includes, setIncludes] = useState(initialIncludes);
+  const [narrows, setNarrows] = useState(initialNarrows);
+  const [excludes, setExcludes] = useState(initialExcludes);
+  const [showNarrow, setShowNarrow] = useState(initialNarrows.length > 0);
+  const [showExclude, setShowExclude] = useState(initialExcludes.length > 0);
+
+  // Search state for detailed targeting
+  const [targetQuery, setTargetQuery] = useState('');
+  const [targetCategoryClass, setTargetCategoryClass] = useState('interests'); // 'interests' | 'behaviors' | 'demographics'
+  const [targetSuggestions, setTargetSuggestions] = useState([]);
+  const [searchingTarget, setSearchingTarget] = useState(false);
+  const [activeTargetMode, setActiveTargetMode] = useState('include'); // 'include' | 'narrow' | 'exclude'
+  const [advantageExpansion, setAdvantageExpansion] = useState(targeting.targeting_automation?.detailed_targeting_expansion === 1);
+
+  // Custom Audiences
+  const [includedAudiences, setIncludedAudiences] = useState(targeting.custom_audiences?.map(a => a.id) || []);
+  const [excludedAudiences, setExcludedAudiences] = useState(targeting.excluded_custom_audiences?.map(a => a.id) || []);
+
+  // Placements & Devices
+  const [placementMode, setPlacementMode] = useState(targeting.publisher_platforms?.length === 4 ? 'advantage' : 'manual');
+  const [devices, setDevices] = useState(targeting.device_platforms || ['mobile', 'desktop']);
+  const [deviceOs, setDeviceOs] = useState(targeting.user_os?.[0] || 'all');
+  const [wifiOnly, setWifiOnly] = useState(targeting.wireless_carrier?.includes('Wifi') || false);
+  const [publishers, setPublishers] = useState(targeting.publisher_platforms || ['facebook', 'instagram', 'messenger', 'audience_network']);
+
+  // Sync back to parent on any change
+  useEffect(() => {
+    const flexible_spec = [];
+    if (includes.length > 0) {
+      flexible_spec.push({
+        interests: includes.filter(i => i.category === 'Interest').map(i => ({ id: i.id, name: i.name })),
+        behaviors: includes.filter(i => i.category === 'Behavior').map(b => ({ id: b.id, name: b.name })),
+        work_positions: includes.filter(i => i.category === 'Job Title').map(w => ({ id: w.id, name: w.name })),
+      });
+    }
+    if (narrows.length > 0) {
+      flexible_spec.push({
+        interests: narrows.filter(i => i.category === 'Interest').map(i => ({ id: i.id, name: i.name })),
+        behaviors: narrows.filter(i => i.category === 'Behavior').map(b => ({ id: b.id, name: b.name })),
+        work_positions: narrows.filter(i => i.category === 'Job Title').map(w => ({ id: w.id, name: w.name })),
+      });
+    }
+
+    const geo_locations = {
+      countries: [country],
+      location_types: locationType === 'home_and_recent' ? ['home', 'recent'] : [locationType],
+    };
+    if (cities.length > 0) geo_locations.cities = cities;
+    if (regions.length > 0) geo_locations.regions = regions;
+
+    const payload = {
+      geo_locations,
+      age_min: parseInt(ageMin) || 18,
+      age_max: parseInt(ageMax) || 65,
+      genders: [parseInt(gender)],
+      locales: locales.length > 0 ? locales : undefined,
+      device_platforms: placementMode === 'advantage' ? ['mobile', 'desktop'] : devices,
+      publisher_platforms: placementMode === 'advantage' ? ['facebook', 'instagram', 'messenger', 'audience_network'] : publishers,
+    };
+
+    if (flexible_spec.length > 0) payload.flexible_spec = flexible_spec;
+    if (excludes.length > 0) {
+      payload.exclusions = {
+        interests: excludes.filter(i => i.category === 'Interest').map(i => ({ id: i.id, name: i.name })),
+        behaviors: excludes.filter(i => i.category === 'Behavior').map(b => ({ id: b.id, name: b.name })),
+      };
+    }
+    if (includedAudiences.length > 0) {
+      payload.custom_audiences = includedAudiences.map(id => ({ id }));
+    }
+    if (excludedAudiences.length > 0) {
+      payload.excluded_custom_audiences = excludedAudiences.map(id => ({ id }));
+    }
+    if (advantageExpansion) {
+      payload.targeting_automation = { detailed_targeting_expansion: 1 };
+    }
+    if (wifiOnly) {
+      payload.wireless_carrier = ['Wifi'];
+    }
+    if (deviceOs !== 'all') {
+      payload.user_os = [deviceOs];
+    }
+
+    onChange(payload);
+  }, [
+    country, locationType, cities, regions, ageMin, ageMax, gender, locales,
+    includes, narrows, excludes, includedAudiences, excludedAudiences,
+    placementMode, devices, deviceOs, wifiOnly, publishers, advantageExpansion
+  ]);
+
+  // Geo search
+  async function handleSearchGeo(q) {
+    setGeoQuery(q);
+    if (!q || q.length < 2) { setGeoSuggestions([]); return; }
+    setSearchingGeo(true);
+    try {
+      const data = await searchGeoLocations(q);
+      setGeoSuggestions(data.locations || []);
+    } catch {
+      setGeoSuggestions([]);
+    } finally {
+      setSearchingGeo(false);
+    }
+  }
+
+  // Detailed targeting search
+  async function handleSearchTarget(q, cls) {
+    setTargetQuery(q);
+    const useClass = cls || targetCategoryClass;
+    if (!q || q.length < 2) { setTargetSuggestions([]); return; }
+    setSearchingTarget(true);
+    try {
+      const data = await searchTargetingCategories(q, useClass);
+      setTargetSuggestions(data.categories || []);
+    } catch {
+      setTargetSuggestions([]);
+    } finally {
+      setSearchingTarget(false);
+    }
+  }
+
+  function addTargetItem(item, mode = activeTargetMode) {
+    const formatted = {
+      id: item.id,
+      name: item.name,
+      category: item.type === 'behaviors' ? 'Behavior' : item.disambiguation_category || item.topic || 'Interest',
+      audience_size: item.audience_size_lower_bound ? `${(item.audience_size_lower_bound / 1000000).toFixed(1)}M` : null
+    };
+    if (mode === 'include') {
+      if (!includes.some(i => i.id === item.id)) setIncludes(prev => [...prev, formatted]);
+    } else if (mode === 'narrow') {
+      if (!narrows.some(i => i.id === item.id)) setNarrows(prev => [...prev, formatted]);
+    } else if (mode === 'exclude') {
+      if (!excludes.some(i => i.id === item.id)) setExcludes(prev => [...prev, formatted]);
+    }
+    setTargetQuery('');
+    setTargetSuggestions([]);
+  }
+
+  function applyMetroPreset(preset) {
+    setCountry('IN');
+    setCities(preset.cities || []);
+    setRegions([]);
+  }
+
+  function toggleLanguage(localeId) {
+    setLocales(prev => prev.includes(localeId) ? prev.filter(l => l !== localeId) : [...prev, localeId]);
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {/* ── 1. GEOGRAPHIC LOCATIONS ── */}
+      <div className="targeting-section-box">
+        <div className="targeting-section-header">
+          <span>📍 Locations & Geographic Targeting</span>
+          <span style={{ fontSize: 11, color: 'var(--clr-text-3)', fontWeight: 400 }}>Meta Geo-Targeting</span>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div className="form-group">
+            <label className="form-label">Target Country</label>
+            <select className="form-input" value={country} onChange={e => { setCountry(e.target.value); setCities([]); setRegions([]); }}>
+              {COUNTRIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+            </select>
+          </div>
+
+          <div className="form-group">
+            <label className="form-label">Location Living Status</label>
+            <select className="form-input" value={locationType} onChange={e => setLocationType(e.target.value)}>
+              <option value="home_and_recent">🏠 Living in or recently in this location</option>
+              <option value="home">🏡 People living in this location</option>
+              <option value="recent">📍 People recently in this location</option>
+              <option value="travel_in">✈️ People traveling in this location</option>
+            </select>
+          </div>
+        </div>
+
+        {country === 'IN' && (
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--clr-text-2)', marginBottom: 6 }}>
+              ⚡ Quick Metro Presets (Click to apply)
+            </div>
+            <div className="targeting-preset-row">
+              {INDIAN_METRO_PRESETS.map(p => {
+                const isActive = (p.key === 'pan_india' && cities.length === 0) || (cities.length > 0 && p.cities.some(pc => cities.some(c => c.name === pc.name)));
+                return (
+                  <button
+                    key={p.key}
+                    type="button"
+                    className={`targeting-preset-pill${isActive ? ' targeting-preset-pill--active' : ''}`}
+                    onClick={() => applyMetroPreset(p)}
+                  >
+                    {p.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Live City & Region Autocomplete */}
+        <div className="form-group" style={{ position: 'relative' }}>
+          <label className="form-label">🏙️ Target Specific Cities, States or Pincodes (Optional)</label>
+          <input
+            className="form-input"
+            placeholder="Search city e.g. Mumbai, Noida, Bengaluru, Dubai, London..."
+            value={geoQuery}
+            onChange={e => handleSearchGeo(e.target.value)}
+          />
+          {geoSuggestions.length > 0 && (
+            <div style={{
+              position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 30,
+              background: 'var(--clr-surface)', border: '1px solid var(--clr-border)',
+              borderRadius: 8, maxHeight: 180, overflowY: 'auto', boxShadow: '0 8px 24px rgba(0,0,0,.5)'
+            }}>
+              {geoSuggestions.map(item => (
+                <div
+                  key={item.key}
+                  onClick={() => {
+                    if (item.type === 'city') {
+                      if (!cities.some(c => c.key === item.key)) {
+                        setCities(prev => [...prev, { key: item.key, name: item.name, radius: 25, distance_unit: 'kilometer' }]);
+                      }
+                    } else if (item.type === 'region') {
+                      if (!regions.some(r => r.key === item.key)) {
+                        setRegions(prev => [...prev, { key: item.key, name: item.name }]);
+                      }
+                    }
+                    setGeoQuery('');
+                    setGeoSuggestions([]);
+                  }}
+                  style={{ padding: '8px 12px', fontSize: 12, cursor: 'pointer', borderBottom: '1px solid rgba(255,255,255,.05)', display: 'flex', justifyContent: 'space-between' }}
+                  onMouseEnter={e => e.currentTarget.style.background = 'rgba(37,211,102,.1)'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                >
+                  <div>
+                    <strong>{item.name}</strong> <span style={{ color: 'var(--clr-text-3)', fontSize: 11 }}>({item.region || item.type})</span>
+                  </div>
+                  <span style={{ fontSize: 10, color: 'var(--clr-primary)', fontWeight: 700 }}>{item.country_name || item.country_code}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Active Cities Chips */}
+          {(cities.length > 0 || regions.length > 0) && (
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 10 }}>
+              {regions.map(r => (
+                <span key={r.key} className="targeting-chip targeting-chip--blue">
+                  📍 State/Region: {r.name}
+                  <button type="button" className="targeting-chip-remove" onClick={() => setRegions(regions.filter(x => x.key !== r.key))}>✕</button>
+                </span>
+              ))}
+              {cities.map(c => (
+                <span key={c.key} className="targeting-chip">
+                  🏙️ {c.name} (+{c.radius || 25} km)
+                  <button type="button" className="targeting-chip-remove" onClick={() => setCities(cities.filter(x => x.key !== c.key))}>✕</button>
+                </span>
+              ))}
+              <button
+                type="button"
+                className="btn btn--ghost btn--sm"
+                style={{ fontSize: 10, padding: '2px 6px' }}
+                onClick={() => { setCities([]); setRegions([]); }}
+              >
+                Clear all cities (Pan-{country})
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── 2. DEMOGRAPHICS & LANGUAGES ── */}
+      <div className="targeting-section-box">
+        <div className="targeting-section-header">
+          <span>👤 Demographics & Languages</span>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+          <div className="form-group">
+            <label className="form-label">Min Age</label>
+            <input className="form-input" type="number" min="18" max="65" value={ageMin} onChange={e => setAgeMin(e.target.value)} />
+          </div>
+
+          <div className="form-group">
+            <label className="form-label">Max Age</label>
+            <input className="form-input" type="number" min="18" max="65" value={ageMax} onChange={e => setAgeMax(e.target.value)} />
+          </div>
+
+          <div className="form-group">
+            <label className="form-label">Gender</label>
+            <select className="form-input" value={gender} onChange={e => setGender(parseInt(e.target.value))}>
+              <option value={0}>All Genders</option>
+              <option value={1}>Men Only</option>
+              <option value={2}>Women Only</option>
+            </select>
+          </div>
+        </div>
+
+        {/* Languages Selector */}
+        <div>
+          <label className="form-label">🗣️ Languages (Optional - Default: All Languages)</label>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
+            <button
+              type="button"
+              className={`targeting-preset-pill${locales.length === 0 ? ' targeting-preset-pill--active' : ''}`}
+              onClick={() => setLocales([])}
+            >
+              All Languages
+            </button>
+            {TARGET_LANGUAGES.map(l => (
+              <button
+                key={l.key}
+                type="button"
+                className={`targeting-preset-pill${locales.includes(l.locale) ? ' targeting-preset-pill--active' : ''}`}
+                onClick={() => toggleLanguage(l.locale)}
+              >
+                {l.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* ── 3. DETAILED TARGETING (3-TIER ENGINE) ── */}
+      <div className="targeting-section-box">
+        <div className="targeting-section-header">
+          <span>🎯 Detailed Targeting (Interests, Behaviors & Demographics)</span>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, cursor: 'pointer', color: 'var(--clr-primary)', fontWeight: 600 }}>
+            <input
+              type="checkbox"
+              checked={advantageExpansion}
+              onChange={e => setAdvantageExpansion(e.target.checked)}
+            />
+            Advantage+ Detailed Targeting
+          </label>
+        </div>
+
+        {/* Search Engine */}
+        <div style={{ position: 'relative' }}>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center' }}>
+            <div className="targeting-tab-bar" style={{ flex: 1 }}>
+              <button
+                type="button"
+                className={`targeting-tab-btn${targetCategoryClass === 'interests' ? ' targeting-tab-btn--active' : ''}`}
+                onClick={() => { setTargetCategoryClass('interests'); if (targetQuery) handleSearchTarget(targetQuery, 'interests'); }}
+              >
+                🎯 Interests
+              </button>
+              <button
+                type="button"
+                className={`targeting-tab-btn${targetCategoryClass === 'behaviors' ? ' targeting-tab-btn--active' : ''}`}
+                onClick={() => { setTargetCategoryClass('behaviors'); if (targetQuery) handleSearchTarget(targetQuery, 'behaviors'); }}
+              >
+                💼 Behaviors
+              </button>
+              <button
+                type="button"
+                className={`targeting-tab-btn${targetCategoryClass === 'demographics' ? ' targeting-tab-btn--active' : ''}`}
+                onClick={() => { setTargetCategoryClass('demographics'); if (targetQuery) handleSearchTarget(targetQuery, 'demographics'); }}
+              >
+                👤 Demographics & Life Events
+              </button>
+            </div>
+
+            <select
+              className="form-input"
+              style={{ width: 'auto', fontSize: 11, padding: '3px 8px', height: 'auto', fontWeight: 700 }}
+              value={activeTargetMode}
+              onChange={e => setActiveTargetMode(e.target.value)}
+            >
+              <option value="include">➕ Add to Include</option>
+              <option value="narrow">🔒 Add to Narrow (AND)</option>
+              <option value="exclude">🚫 Add to Exclude</option>
+            </select>
+          </div>
+
+          <input
+            className="form-input"
+            placeholder={`Search Meta ${targetCategoryClass} e.g. Software, Small Business, Real Estate, CEO...`}
+            value={targetQuery}
+            onChange={e => handleSearchTarget(e.target.value)}
+          />
+
+          {targetSuggestions.length > 0 && (
+            <div style={{
+              position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 30,
+              background: 'var(--clr-surface)', border: '1px solid var(--clr-border)',
+              borderRadius: 8, maxHeight: 200, overflowY: 'auto', boxShadow: '0 8px 24px rgba(0,0,0,.5)'
+            }}>
+              {targetSuggestions.map(item => (
+                <div
+                  key={item.id}
+                  onClick={() => addTargetItem(item)}
+                  style={{ padding: '8px 12px', fontSize: 12, cursor: 'pointer', borderBottom: '1px solid rgba(255,255,255,.05)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                  onMouseEnter={e => e.currentTarget.style.background = 'rgba(37,211,102,.1)'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                >
+                  <div>
+                    <strong>{item.name}</strong> <span style={{ color: 'var(--clr-text-3)', fontSize: 10 }}>({item.type || item.topic || targetCategoryClass})</span>
+                    {item.path && <div style={{ fontSize: 10, color: 'var(--clr-text-3)' }}>{item.path.join(' › ')}</div>}
+                  </div>
+                  {item.audience_size_lower_bound && (
+                    <span style={{ fontSize: 10, color: 'var(--clr-primary)', fontWeight: 700 }}>
+                      👥 {(item.audience_size_lower_bound / 1000000).toFixed(1)}M
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Quick Popular Suggestions */}
+        <div>
+          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--clr-text-3)', marginBottom: 6 }}>
+            💡 Quick Add Popular Targeting:
+          </div>
+          <div className="targeting-preset-row">
+            {POPULAR_TARGETING_CHIPS.map(chip => (
+              <button
+                key={chip.id}
+                type="button"
+                className="targeting-preset-pill"
+                onClick={() => addTargetItem(chip, 'include')}
+              >
+                + {chip.name} <span style={{ opacity: 0.6, fontSize: 9 }}>({chip.category})</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* 1. INCLUDE CRITERIA */}
+        <div>
+          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--clr-text)', marginBottom: 6, display: 'flex', justifyContent: 'space-between' }}>
+            <span>✅ INCLUDE People Who Match (ANY of these) ({includes.length})</span>
+          </div>
+          {includes.length === 0 ? (
+            <div style={{ fontSize: 11, color: 'var(--clr-text-3)', fontStyle: 'italic' }}>
+              No detailed targeting selected (Broad audience across selected locations).
+            </div>
+          ) : (
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {includes.map(item => (
+                <span key={item.id} className="targeting-chip">
+                  🎯 {item.name} <span style={{ opacity: 0.7, fontSize: 10 }}>({item.category})</span>
+                  <button type="button" className="targeting-chip-remove" onClick={() => setIncludes(includes.filter(i => i.id !== item.id))}>✕</button>
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* 2. NARROW AUDIENCE (AND MUST ALSO MATCH) */}
+        {!showNarrow && (
+          <div>
+            <button
+              type="button"
+              className="btn btn--secondary btn--sm"
+              style={{ fontSize: 11 }}
+              onClick={() => { setShowNarrow(true); setActiveTargetMode('narrow'); }}
+            >
+              🔒 + Narrow Audience (AND MUST ALSO MATCH)
+            </button>
+          </div>
+        )}
+
+        {showNarrow && (
+          <div className="narrow-box">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+              <strong style={{ fontSize: 11, color: '#c084fc' }}>🔒 NARROW AUDIENCE: And Must Also Match (ANY of these)</strong>
+              <button type="button" className="btn btn--ghost btn--sm" style={{ fontSize: 10, padding: '1px 6px' }} onClick={() => { setNarrows([]); setShowNarrow(false); }}>✕ Remove Narrowing</button>
+            </div>
+            {narrows.length === 0 ? (
+              <div style={{ fontSize: 11, color: 'var(--clr-text-3)', fontStyle: 'italic' }}>
+                Use search bar above with "Add to Narrow" selected to add requirements.
+              </div>
+            ) : (
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {narrows.map(item => (
+                  <span key={item.id} className="targeting-chip targeting-chip--purple">
+                    🔒 {item.name} <span style={{ opacity: 0.7, fontSize: 10 }}>({item.category})</span>
+                    <button type="button" className="targeting-chip-remove" onClick={() => setNarrows(narrows.filter(i => i.id !== item.id))}>✕</button>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* 3. EXCLUDE AUDIENCE */}
+        {!showExclude && (
+          <div>
+            <button
+              type="button"
+              className="btn btn--secondary btn--sm"
+              style={{ fontSize: 11 }}
+              onClick={() => { setShowExclude(true); setActiveTargetMode('exclude'); }}
+            >
+              🚫 + Exclude People Who Match
+            </button>
+          </div>
+        )}
+
+        {showExclude && (
+          <div className="exclude-box">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+              <strong style={{ fontSize: 11, color: '#f87171' }}>🚫 EXCLUDE AUDIENCE: Exclude People Who Match</strong>
+              <button type="button" className="btn btn--ghost btn--sm" style={{ fontSize: 10, padding: '1px 6px' }} onClick={() => { setExcludes([]); setShowExclude(false); }}>✕ Remove Exclusions</button>
+            </div>
+            {excludes.length === 0 ? (
+              <div style={{ fontSize: 11, color: 'var(--clr-text-3)', fontStyle: 'italic' }}>
+                Use search bar above with "Add to Exclude" selected to add exclusions.
+              </div>
+            ) : (
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {excludes.map(item => (
+                  <span key={item.id} className="targeting-chip targeting-chip--red">
+                    🚫 {item.name} <span style={{ opacity: 0.7, fontSize: 10 }}>({item.category})</span>
+                    <button type="button" className="targeting-chip-remove" onClick={() => setExcludes(excludes.filter(i => i.id !== item.id))}>✕</button>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* ── 4. CUSTOM AUDIENCES & LOOKALIKES ── */}
+      {customAudiences.length > 0 && (
+        <div className="targeting-section-box">
+          <div className="targeting-section-header">
+            <span>👥 Custom Audiences & Lookalikes</span>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div className="form-group">
+              <label className="form-label">Include Custom Audiences</label>
+              <select
+                className="form-input"
+                onChange={e => {
+                  if (e.target.value && !includedAudiences.includes(e.target.value)) {
+                    setIncludedAudiences(prev => [...prev, e.target.value]);
+                  }
+                  e.target.value = '';
+                }}
+              >
+                <option value="">Select custom audience to include...</option>
+                {customAudiences.map(a => (
+                  <option key={a.id} value={a.id}>{a.name} ({a.subtype || 'Custom'})</option>
+                ))}
+              </select>
+
+              {includedAudiences.length > 0 && (
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
+                  {includedAudiences.map(id => {
+                    const aud = customAudiences.find(a => a.id === id);
+                    return (
+                      <span key={id} className="targeting-chip targeting-chip--blue">
+                        👥 {aud?.name || id}
+                        <button type="button" className="targeting-chip-remove" onClick={() => setIncludedAudiences(includedAudiences.filter(x => x !== id))}>✕</button>
+                      </span>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Exclude Custom Audiences (e.g. Existing Customers)</label>
+              <select
+                className="form-input"
+                onChange={e => {
+                  if (e.target.value && !excludedAudiences.includes(e.target.value)) {
+                    setExcludedAudiences(prev => [...prev, e.target.value]);
+                  }
+                  e.target.value = '';
+                }}
+              >
+                <option value="">Select custom audience to exclude...</option>
+                {customAudiences.map(a => (
+                  <option key={a.id} value={a.id}>{a.name} ({a.subtype || 'Custom'})</option>
+                ))}
+              </select>
+
+              {excludedAudiences.length > 0 && (
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
+                  {excludedAudiences.map(id => {
+                    const aud = customAudiences.find(a => a.id === id);
+                    return (
+                      <span key={id} className="targeting-chip targeting-chip--red">
+                        🚫 {aud?.name || id}
+                        <button type="button" className="targeting-chip-remove" onClick={() => setExcludedAudiences(excludedAudiences.filter(x => x !== id))}>✕</button>
+                      </span>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── 5. PLACEMENTS & DEVICES ── */}
+      {showPlacements && (
+        <div className="targeting-section-box">
+          <div className="targeting-section-header">
+            <span>📱 Placements & Devices</span>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button
+                type="button"
+                className={`targeting-preset-pill${placementMode === 'advantage' ? ' targeting-preset-pill--active' : ''}`}
+                onClick={() => setPlacementMode('advantage')}
+              >
+                ✨ Advantage+ Placements (Recommended)
+              </button>
+              <button
+                type="button"
+                className={`targeting-preset-pill${placementMode === 'manual' ? ' targeting-preset-pill--active' : ''}`}
+                onClick={() => setPlacementMode('manual')}
+              >
+                ⚙️ Manual Placements
+              </button>
+            </div>
+          </div>
+
+          {placementMode === 'manual' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div>
+                <label className="form-label">Devices</label>
+                <div style={{ display: 'flex', gap: 16 }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={devices.includes('mobile')}
+                      onChange={() => setDevices(prev => prev.includes('mobile') ? prev.filter(x => x !== 'mobile') : [...prev, 'mobile'])}
+                    />
+                    📱 Mobile Devices
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={devices.includes('desktop')}
+                      onChange={() => setDevices(prev => prev.includes('desktop') ? prev.filter(x => x !== 'desktop') : [...prev, 'desktop'])}
+                    />
+                    💻 Desktop Computers
+                  </label>
+                </div>
+              </div>
+
+              <div>
+                <label className="form-label">Platforms</label>
+                <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+                  {['facebook', 'instagram', 'messenger', 'audience_network'].map(p => (
+                    <label key={p} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, cursor: 'pointer', textTransform: 'capitalize' }}>
+                      <input
+                        type="checkbox"
+                        checked={publishers.includes(p)}
+                        onChange={() => setPublishers(prev => prev.includes(p) ? prev.filter(x => x !== p) : [...prev, p])}
+                      />
+                      {p.replace('_', ' ')}
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div className="form-group">
+                  <label className="form-label">Mobile OS</label>
+                  <select className="form-input" value={deviceOs} onChange={e => setDeviceOs(e.target.value)}>
+                    <option value="all">All Mobile Devices (Android & iOS)</option>
+                    <option value="Android">Android Devices Only</option>
+                    <option value="iOS">iOS Devices Only</option>
+                  </select>
+                </div>
+
+                <div className="form-group" style={{ display: 'flex', alignItems: 'center', marginTop: 24 }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={wifiOnly}
+                      onChange={e => setWifiOnly(e.target.checked)}
+                    />
+                    📶 Only when connected to Wi-Fi
+                  </label>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
 //  MODAL: EDIT ENTITY (Campaign, AdSet, Ad & Creative)
 // ═══════════════════════════════════════════════════════════════
 
-function EditEntityModal({ target, currency, onClose, onSaved }) {
-  const { type, item, adset } = target;
+function EditEntityModal({ target, currency, customAudiences = [], onClose, onSaved }) {
+  const { type, item } = target;
   
   // General
   const [name, setName] = useState(item.name || '');
@@ -1162,35 +1953,12 @@ function EditEntityModal({ target, currency, onClose, onSaved }) {
   // AdSet Optimization & Schedule
   const [optGoal, setOptGoal] = useState(item.optimization_goal || 'CONVERSATIONS');
   const [destType, setDestType] = useState(item.destination_type || 'WHATSAPP');
+  const [bidStrategy, setBidStrategy] = useState(item.bid_strategy || 'LOWEST_COST_WITHOUT_CAP');
   const [startTime, setStartTime] = useState(item.start_time ? item.start_time.slice(0, 16) : '');
   const [endTime, setEndTime] = useState(item.end_time ? item.end_time.slice(0, 16) : '');
 
   // AdSet Targeting State
-  const initialTargeting = item.targeting || {};
-  const [country, setCountry] = useState(initialTargeting.geo_locations?.countries?.[0] || 'IN');
-  const [ageMin, setAgeMin] = useState(initialTargeting.age_min || 18);
-  const [ageMax, setAgeMax] = useState(initialTargeting.age_max || 65);
-  const [gender, setGender] = useState(initialTargeting.genders?.[0] !== undefined ? initialTargeting.genders[0] : 0);
-  
-  // Devices & Placements
-  const [devices, setDevices] = useState(initialTargeting.device_platforms || ['mobile', 'desktop']);
-  const [publishers, setPublishers] = useState(initialTargeting.publisher_platforms || ['facebook', 'instagram', 'messenger', 'audience_network']);
-
-  // Extract initial interests / behaviors / job titles
-  const extractedInterests = [];
-  if (initialTargeting.flexible_spec) {
-    initialTargeting.flexible_spec.forEach(spec => {
-      if (spec.interests) spec.interests.forEach(i => extractedInterests.push({ ...i, category: 'Interest' }));
-      if (spec.behaviors) spec.behaviors.forEach(b => extractedInterests.push({ ...b, category: 'Behavior' }));
-      if (spec.work_positions) spec.work_positions.forEach(w => extractedInterests.push({ ...w, category: 'Job Title' }));
-    });
-  } else if (initialTargeting.interests) {
-    initialTargeting.interests.forEach(i => extractedInterests.push({ ...i, category: 'Interest' }));
-  }
-  const [interests, setInterests] = useState(extractedInterests);
-  const [interestQuery, setInterestQuery] = useState('');
-  const [interestSuggestions, setInterestSuggestions] = useState([]);
-  const [searchingInterests, setSearchingInterests] = useState(false);
+  const [targetingPayload, setTargetingPayload] = useState(item.targeting || {});
 
   // Ad Creative State
   const initialCr = item.creative || {};
@@ -1209,21 +1977,6 @@ function EditEntityModal({ target, currency, onClose, onSaved }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
-  // Search Meta interests
-  async function handleSearchInterests(q) {
-    setInterestQuery(q);
-    if (!q || q.length < 2) { setInterestSuggestions([]); return; }
-    setSearchingInterests(true);
-    try {
-      const data = await searchInterests(q);
-      setInterestSuggestions(data.interests || []);
-    } catch {
-      setInterestSuggestions([]);
-    } finally {
-      setSearchingInterests(false);
-    }
-  }
-
   function handleImageChange(e) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -1231,14 +1984,6 @@ function EditEntityModal({ target, currency, onClose, onSaved }) {
     const reader = new FileReader();
     reader.onload = () => setImagePreview(reader.result);
     reader.readAsDataURL(file);
-  }
-
-  function toggleDevice(d) {
-    setDevices(prev => prev.includes(d) ? prev.filter(x => x !== d) : [...prev, d]);
-  }
-
-  function togglePublisher(p) {
-    setPublishers(prev => prev.includes(p) ? prev.filter(x => x !== p) : [...prev, p]);
   }
 
   async function handleSave(e) {
@@ -1257,17 +2002,10 @@ function EditEntityModal({ target, currency, onClose, onSaved }) {
           status,
           daily_budget: budget || undefined,
           optimization_goal: optGoal,
+          bid_strategy: bidStrategy,
           start_time: startTime ? new Date(startTime).toISOString() : undefined,
           end_time: endTime ? new Date(endTime).toISOString() : undefined,
-          targeting: {
-            countries: [country],
-            age_min: parseInt(ageMin) || 18,
-            age_max: parseInt(ageMax) || 65,
-            genders: [parseInt(gender)],
-            device_platforms: devices.length > 0 ? devices : ['mobile', 'desktop'],
-            publisher_platforms: publishers.length > 0 ? publishers : ['facebook', 'instagram'],
-            interests: interests.map(i => ({ id: i.id, name: i.name })),
-          }
+          targeting: targetingPayload,
         };
         await updateAdSet(item.id, payload);
       } else if (type === 'ad') {
@@ -1293,9 +2031,9 @@ function EditEntityModal({ target, currency, onClose, onSaved }) {
 
   return (
     <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal-box" style={{ maxWidth: type === 'ad' || type === 'adset' ? 700 : 460, maxHeight: '90vh', overflowY: 'auto' }}>
+      <div className="modal-box" style={{ maxWidth: type === 'ad' || type === 'adset' ? 760 : 460, maxHeight: '92vh', overflowY: 'auto' }}>
         <div className="modal-title">
-          ✏️ Edit {type === 'campaign' ? 'Campaign' : type === 'adset' ? 'Ad Set & Targeting' : 'Ad & Creative'}
+          ✏️ Edit {type === 'campaign' ? 'Campaign' : type === 'adset' ? 'Ad Set & Full Targeting' : 'Ad & Creative'}
         </div>
         <div style={{ fontSize: 11, color: 'var(--clr-text-3)', marginTop: -14, marginBottom: 16 }}>
           Meta ID: <code>{item.id}</code>
@@ -1355,139 +2093,52 @@ function EditEntityModal({ target, currency, onClose, onSaved }) {
             </div>
 
             {type === 'adset' && (
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                <div className="form-group">
-                  <label className="form-label">Optimization Goal</label>
-                  <select className="form-input" value={optGoal} onChange={e => setOptGoal(e.target.value)}>
-                    <option value="CONVERSATIONS">💬 Conversations (WhatsApp / Messenger)</option>
-                    <option value="LINK_CLICKS">🌐 Link Clicks (Website Traffic)</option>
-                    <option value="LEAD_GENERATION">📋 Lead Generation</option>
-                    <option value="IMPRESSIONS">👁️ Impressions</option>
-                    <option value="REACH">📢 Reach</option>
-                  </select>
+              <>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                  <div className="form-group">
+                    <label className="form-label">Optimization Goal</label>
+                    <select className="form-input" value={optGoal} onChange={e => setOptGoal(e.target.value)}>
+                      <option value="CONVERSATIONS">💬 Conversations (WhatsApp / Messenger)</option>
+                      <option value="LINK_CLICKS">🌐 Link Clicks (Website Traffic)</option>
+                      <option value="OFFSITE_CONVERSIONS">🛍️ Conversions / Leads</option>
+                      <option value="LEAD_GENERATION">📋 Instant Lead Forms</option>
+                      <option value="IMPRESSIONS">👁️ Impressions</option>
+                      <option value="REACH">📢 Reach</option>
+                    </select>
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">Destination</label>
+                    <select className="form-input" value={destType} onChange={e => setDestType(e.target.value)}>
+                      <option value="WHATSAPP">🟢 Click-to-WhatsApp</option>
+                      <option value="MESSENGER">🔵 Messenger</option>
+                      <option value="WEBSITE">🌐 Website URL</option>
+                    </select>
+                  </div>
                 </div>
 
-                <div className="form-group">
-                  <label className="form-label">Destination</label>
-                  <select className="form-input" value={destType} onChange={e => setDestType(e.target.value)}>
-                    <option value="WHATSAPP">🟢 Click-to-WhatsApp</option>
-                    <option value="MESSENGER">🔵 Messenger</option>
-                    <option value="WEBSITE">🌐 Website URL</option>
-                  </select>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                  <div className="form-group">
+                    <label className="form-label">Start Schedule (Optional)</label>
+                    <input className="form-input" type="datetime-local" value={startTime} onChange={e => setStartTime(e.target.value)} />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">End Schedule (Optional)</label>
+                    <input className="form-input" type="datetime-local" value={endTime} onChange={e => setEndTime(e.target.value)} />
+                  </div>
                 </div>
-              </div>
+              </>
             )}
           </div>
 
-          {/* ════ AD SET TARGETING EDIT CONTROLS ════ */}
+          {/* ════ FULL AD SET TARGETING CONTROLS ════ */}
           {type === 'adset' && (
-            <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--clr-border)', borderRadius: 8, padding: 14, display: 'flex', flexDirection: 'column', gap: 14 }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--clr-text)', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: 6 }}>
-                🎯 Demographics & Location Targeting
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
-                <div className="form-group">
-                  <label className="form-label">Target Country</label>
-                  <select className="form-input" value={country} onChange={e => setCountry(e.target.value)}>
-                    {COUNTRIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
-                  </select>
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">Min Age</label>
-                  <input className="form-input" type="number" min="18" max="65" value={ageMin} onChange={e => setAgeMin(e.target.value)} />
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">Max Age</label>
-                  <input className="form-input" type="number" min="18" max="65" value={ageMax} onChange={e => setAgeMax(e.target.value)} />
-                </div>
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Gender</label>
-                <select className="form-input" value={gender} onChange={e => setGender(parseInt(e.target.value))}>
-                  <option value={0}>All Genders</option>
-                  <option value={1}>Men Only</option>
-                  <option value={2}>Women Only</option>
-                </select>
-              </div>
-
-              {/* Interests Picker */}
-              <div className="form-group" style={{ position: 'relative' }}>
-                <label className="form-label">🎯 Detailed Interests, Behaviors & Job Titles</label>
-                <input
-                  className="form-input"
-                  placeholder="Search Meta interests e.g. Healthcare, Software, Education, CEO..."
-                  value={interestQuery}
-                  onChange={e => handleSearchInterests(e.target.value)}
-                />
-                {interestSuggestions.length > 0 && (
-                  <div style={{
-                    position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 20,
-                    background: 'var(--clr-surface)', border: '1px solid var(--clr-border)',
-                    borderRadius: 8, maxHeight: 160, overflowY: 'auto', boxShadow: '0 8px 24px rgba(0,0,0,.5)'
-                  }}>
-                    {interestSuggestions.map(item => (
-                      <div
-                        key={item.id}
-                        onClick={() => {
-                          if (!interests.some(i => i.id === item.id)) {
-                            setInterests(prev => [...prev, { id: item.id, name: item.name, category: item.topic || 'Interest' }]);
-                          }
-                          setInterestQuery('');
-                          setInterestSuggestions([]);
-                        }}
-                        style={{ padding: '8px 12px', fontSize: 12, cursor: 'pointer', borderBottom: '1px solid rgba(255,255,255,.05)' }}
-                        onMouseEnter={e => e.currentTarget.style.background = 'rgba(37,211,102,.1)'}
-                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                      >
-                        <strong>{item.name}</strong> <span style={{ color: 'var(--clr-text-3)', fontSize: 10 }}>({item.topic || 'Interest'})</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {interests.length > 0 && (
-                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 10 }}>
-                    {interests.map(item => (
-                      <span key={item.id} className="badge badge--green" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 9px', fontSize: 11 }}>
-                        🎯 {item.name} {item.category && <span style={{ opacity: 0.7, fontSize: 10 }}>({item.category})</span>}
-                        <button type="button" onClick={() => setInterests(interests.filter(i => i.id !== item.id))} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', fontSize: 11, padding: 0 }}>✕</button>
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Placements & Devices */}
-              <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: 10 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--clr-text-2)', marginBottom: 8, textTransform: 'uppercase' }}>
-                  📱 Devices & Platforms
-                </div>
-
-                <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 10 }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: 'pointer' }}>
-                    <input type="checkbox" checked={devices.includes('mobile')} onChange={() => toggleDevice('mobile')} />
-                    📱 Mobile Devices
-                  </label>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: 'pointer' }}>
-                    <input type="checkbox" checked={devices.includes('desktop')} onChange={() => toggleDevice('desktop')} />
-                    💻 Desktop Computers
-                  </label>
-                </div>
-
-                <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
-                  {['facebook', 'instagram', 'messenger', 'audience_network'].map(p => (
-                    <label key={p} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, cursor: 'pointer', textTransform: 'capitalize' }}>
-                      <input type="checkbox" checked={publishers.includes(p)} onChange={() => togglePublisher(p)} />
-                      {p.replace('_', ' ')}
-                    </label>
-                  ))}
-                </div>
-              </div>
-            </div>
+            <FullTargetingBuilder
+              targeting={item.targeting || {}}
+              onChange={setTargetingPayload}
+              customAudiences={customAudiences}
+              showPlacements={true}
+            />
           )}
 
           {/* ════ AD CREATIVE & COPY EDIT CONTROLS ════ */}
@@ -1577,6 +2228,7 @@ function EditEntityModal({ target, currency, onClose, onSaved }) {
   );
 }
 
+
 // ═══════════════════════════════════════════════════════════════
 //  TAB: CREATE AD (Wizard)
 // ═══════════════════════════════════════════════════════════════
@@ -1594,18 +2246,13 @@ function CreateAdTab({ account, accounts, onSuccess }) {
   const [searchingInterests,  setSearchingInterests]  = useState(false);
 
   // Form state
+  const [targetingPayload, setTargetingPayload] = useState({});
   const [form, setForm] = useState({
     account_id:        '',
     campaign_name:     '',
     objective:         'OUTCOME_ENGAGEMENT',
     status:            'PAUSED',
     daily_budget:      '',
-    // Targeting
-    countries:         ['IN'],
-    age_min:           18,
-    age_max:           65,
-    genders:           [0],
-    interests:         [],
     // Creative
     page_id:           '',
     whatsapp_source:   'page',
@@ -1666,29 +2313,6 @@ function CreateAdTab({ account, accounts, onSuccess }) {
     setForm(f => ({ ...f, [key]: val }));
   }
 
-  async function handleSearchInterests(q) {
-    setInterestQuery(q);
-    if (!q || q.length < 2) { setInterestSuggestions([]); return; }
-    setSearchingInterests(true);
-    try {
-      const data = await searchInterests(q);
-      setInterestSuggestions(data.interests || []);
-    } catch (e) {}
-    finally { setSearchingInterests(false); }
-  }
-
-  function addInterest(interest) {
-    if (!form.interests.some(i => i.id === interest.id)) {
-      setField('interests', [...form.interests, { id: interest.id, name: interest.name }]);
-    }
-    setInterestQuery('');
-    setInterestSuggestions([]);
-  }
-
-  function removeInterest(id) {
-    setField('interests', form.interests.filter(i => i.id !== id));
-  }
-
   async function handlePublish(e) {
     e.preventDefault();
     if (!account && !form.account_id) { setError('Please connect an Ad Account first'); return; }
@@ -1706,13 +2330,7 @@ function CreateAdTab({ account, accounts, onSuccess }) {
         status:        form.status,
         daily_budget:  form.daily_budget || undefined,
         adset_name:    `${form.campaign_name} — Ad Set`,
-        targeting: {
-          geo_locations: { countries: form.countries },
-          age_min: parseInt(form.age_min),
-          age_max: parseInt(form.age_max),
-          genders: form.genders,
-          interests: form.interests,
-        },
+        targeting:     targetingPayload,
         page_id:             form.page_id,
         whatsapp_number:     form.whatsapp_number || undefined,
         headline:            form.headline.trim(),
@@ -1797,84 +2415,18 @@ function CreateAdTab({ account, accounts, onSuccess }) {
       {/* ─── Step 2: Targeting ─── */}
       {step === 2 && (
         <div className="card">
-          <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 6 }}>2. Define Your Audience</div>
-          <div style={{ fontSize: 13, color: 'var(--clr-text-2)', marginBottom: 20 }}>Choose demographics, location, and interest targeting</div>
+          <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 6 }}>2. Define Your Audience (Full Meta Targeting)</div>
+          <div style={{ fontSize: 13, color: 'var(--clr-text-2)', marginBottom: 20 }}>Configure geographic locations, metros, demographics, languages, and 3-tier detailed targeting</div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
-            <div className="form-group">
-              <label className="form-label">Country / Region</label>
-              <select className="form-input" value={form.countries[0]} onChange={e => setField('countries', [e.target.value])}>
-                {COUNTRIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
-              </select>
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">Gender</label>
-              <select className="form-input" value={form.genders[0]} onChange={e => setField('genders', [parseInt(e.target.value)])}>
-                <option value={0}>All Genders</option>
-                <option value={1}>Male Only</option>
-                <option value={2}>Female Only</option>
-              </select>
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">Min Age</label>
-              <input className="form-input" type="number" min="18" max="65" value={form.age_min} onChange={e => setField('age_min', e.target.value)} />
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">Max Age</label>
-              <input className="form-input" type="number" min="18" max="65" value={form.age_max} onChange={e => setField('age_max', e.target.value)} />
-            </div>
-          </div>
-
-          {/* Detailed Interests Search */}
-          <div className="form-group" style={{ position: 'relative' }}>
-            <label className="form-label">🎯 Detailed Targeting / Interests (Optional)</label>
-            <input
-              className="form-input"
-              placeholder="🔍 Search interests e.g. Health & wellness, Ayurveda, Shopping, Real estate..."
-              value={interestQuery}
-              onChange={e => handleSearchInterests(e.target.value)}
-            />
-
-            {/* Autocomplete dropdown */}
-            {interestSuggestions.length > 0 && (
-              <div style={{
-                position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 10,
-                background: 'var(--clr-surface)', border: '1px solid var(--clr-border)',
-                borderRadius: 8, maxHeight: 180, overflowY: 'auto', boxShadow: '0 8px 24px rgba(0,0,0,.3)'
-              }}>
-                {interestSuggestions.map(item => (
-                  <div
-                    key={item.id}
-                    onClick={() => addInterest(item)}
-                    style={{ padding: '8px 12px', fontSize: 12, cursor: 'pointer', borderBottom: '1px solid rgba(255,255,255,.05)' }}
-                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(37,211,102,.1)'}
-                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                  >
-                    <strong>{item.name}</strong> <span style={{ color: 'var(--clr-text-3)', fontSize: 10 }}>({item.audience_size_lower_bound ? formatNum(item.audience_size_lower_bound) + ' people' : item.topic || 'Interest'})</span>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* Selected Interest chips */}
-            {form.interests.length > 0 && (
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 10 }}>
-                {form.interests.map(item => (
-                  <span key={item.id} className="badge badge--green" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px', fontSize: 11 }}>
-                    🎯 {item.name}
-                    <button type="button" onClick={() => removeInterest(item.id)} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', fontSize: 11, padding: 0 }}>✕</button>
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
+          <FullTargetingBuilder
+            targeting={targetingPayload}
+            onChange={setTargetingPayload}
+            showPlacements={false}
+          />
 
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 24 }}>
             <button className="btn btn--ghost" onClick={() => setStep(1)}>← Back</button>
-            <button className="btn btn--primary" onClick={() => { setError(''); setStep(3); }}>Next: Budget →</button>
+            <button className="btn btn--primary" onClick={() => { setError(''); setStep(3); }}>Next: Budget & Schedule →</button>
           </div>
         </div>
       )}
@@ -2187,11 +2739,8 @@ function AudiencesTab({ account }) {
   // Forms
   const [customForm, setCustomForm] = useState({ name: '', description: '', sync_from_crm: true });
   const [lookalikeForm, setLookalikeForm] = useState({ name: '', origin_audience_id: '', country: 'IN', ratio: '0.01' });
-  const [savedForm, setSavedForm] = useState({ name: '', description: '', countries: ['IN'], age_min: 18, age_max: 65, genders: [0], interests: [] });
-
-  // Interest search for Saved Audience
-  const [sq, setSq] = useState('');
-  const [suggs, setSuggs] = useState([]);
+  const [savedForm, setSavedForm] = useState({ name: '', description: '' });
+  const [savedTargeting, setSavedTargeting] = useState({});
 
   useEffect(() => { if (account) load(); }, [account]);
 
@@ -2231,22 +2780,23 @@ function AudiencesTab({ account }) {
     finally { setSaving(false); }
   }
 
-  async function handleSearchSavedInterests(q) {
-    setSq(q);
-    if (!q || q.length < 2) { setSuggs([]); return; }
-    try {
-      const data = await searchInterests(q);
-      setSuggs(data.interests || []);
-    } catch (e) {}
-  }
-
   async function handleCreateSaved(e) {
     e.preventDefault();
+    if (!savedForm.name?.trim()) {
+      alert('Audience Name is required');
+      return;
+    }
     setSaving(true);
     try {
-      await createSavedAudience(savedForm);
+      const payload = {
+        name: savedForm.name.trim(),
+        description: savedForm.description?.trim() || undefined,
+        ...savedTargeting,
+      };
+      await createSavedAudience(payload);
       setShowSavedModal(false);
-      setSavedForm({ name: '', description: '', countries: ['IN'], age_min: 18, age_max: 65, genders: [0], interests: [] });
+      setSavedForm({ name: '', description: '' });
+      setSavedTargeting({});
       load();
     } catch (e) { alert(e.message); }
     finally { setSaving(false); }
@@ -2507,120 +3057,44 @@ function AudiencesTab({ account }) {
       {/* ── Modal: Saved Audience ── */}
       {showSavedModal && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowSavedModal(false)}>
-          <div className="modal-box" style={{ maxWidth: 540 }}>
-            <div className="modal-title">🎯 Define Saved Audience (Targeting)</div>
+          <div className="modal-box" style={{ maxWidth: 760, maxHeight: '92vh', overflowY: 'auto' }}>
+            <div className="modal-title">🎯 Define Saved Audience (Full Meta Targeting)</div>
             <form onSubmit={handleCreateSaved} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              <div className="form-group">
-                <label className="form-label">Audience Name *</label>
-                <input
-                  className="form-input"
-                  placeholder="e.g. India — Health & Wellness Enthusiasts (25-45)"
-                  value={savedForm.name}
-                  onChange={e => setSavedForm(f => ({ ...f, name: e.target.value }))}
-                  required
-                />
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--clr-border)', borderRadius: 8, padding: 14, display: 'flex', flexDirection: 'column', gap: 12 }}>
                 <div className="form-group">
-                  <label className="form-label">Country</label>
-                  <select
-                    className="form-input"
-                    value={savedForm.countries[0]}
-                    onChange={e => setSavedForm(f => ({ ...f, countries: [e.target.value] }))}
-                  >
-                    {COUNTRIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
-                  </select>
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">Gender</label>
-                  <select
-                    className="form-input"
-                    value={savedForm.genders[0]}
-                    onChange={e => setSavedForm(f => ({ ...f, genders: [parseInt(e.target.value)] }))}
-                  >
-                    <option value={0}>All Genders</option>
-                    <option value={1}>Male Only</option>
-                    <option value={2}>Female Only</option>
-                  </select>
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">Min Age</label>
+                  <label className="form-label">Audience Name *</label>
                   <input
                     className="form-input"
-                    type="number"
-                    min="18"
-                    max="65"
-                    value={savedForm.age_min}
-                    onChange={e => setSavedForm(f => ({ ...f, age_min: e.target.value }))}
+                    placeholder="e.g. India — High-Intent Business & Tech (25-50)"
+                    value={savedForm.name}
+                    onChange={e => setSavedForm(f => ({ ...f, name: e.target.value }))}
+                    required
                   />
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label">Max Age</label>
+                  <label className="form-label">Description (Optional)</label>
                   <input
                     className="form-input"
-                    type="number"
-                    min="18"
-                    max="65"
-                    value={savedForm.age_max}
-                    onChange={e => setSavedForm(f => ({ ...f, age_max: e.target.value }))}
+                    placeholder="e.g. Decision makers in metros interested in enterprise tools"
+                    value={savedForm.description}
+                    onChange={e => setSavedForm(f => ({ ...f, description: e.target.value }))}
                   />
                 </div>
               </div>
 
-              {/* Interests search */}
-              <div className="form-group" style={{ position: 'relative' }}>
-                <label className="form-label">🎯 Detailed Interests Targeting</label>
-                <input
-                  className="form-input"
-                  placeholder="Search interests e.g. Healthcare, Fitness, Ayurveda, Shopping..."
-                  value={sq}
-                  onChange={e => handleSearchSavedInterests(e.target.value)}
-                />
-                {suggs.length > 0 && (
-                  <div style={{
-                    position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 10,
-                    background: 'var(--clr-surface)', border: '1px solid var(--clr-border)',
-                    borderRadius: 8, maxHeight: 160, overflowY: 'auto', boxShadow: '0 8px 24px rgba(0,0,0,.3)'
-                  }}>
-                    {suggs.map(item => (
-                      <div
-                        key={item.id}
-                        onClick={() => {
-                          if (!savedForm.interests.some(i => i.id === item.id)) {
-                            setSavedForm(f => ({ ...f, interests: [...f.interests, { id: item.id, name: item.name }] }));
-                          }
-                          setSq(''); setSuggs([]);
-                        }}
-                        style={{ padding: '8px 12px', fontSize: 12, cursor: 'pointer', borderBottom: '1px solid rgba(255,255,255,.05)' }}
-                        onMouseEnter={e => e.currentTarget.style.background = 'rgba(37,211,102,.1)'}
-                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                      >
-                        <strong>{item.name}</strong> <span style={{ color: 'var(--clr-text-3)', fontSize: 10 }}>({item.topic || 'Interest'})</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
+              {/* Full Meta Targeting Builder */}
+              <FullTargetingBuilder
+                targeting={{}}
+                onChange={setSavedTargeting}
+                customAudiences={customList}
+                showPlacements={false}
+              />
 
-                {savedForm.interests.length > 0 && (
-                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 10 }}>
-                    {savedForm.interests.map(item => (
-                      <span key={item.id} className="badge badge--green" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px', fontSize: 11 }}>
-                        🎯 {item.name}
-                        <button type="button" onClick={() => setSavedForm(f => ({ ...f, interests: f.interests.filter(i => i.id !== item.id) }))} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', fontSize: 11, padding: 0 }}>✕</button>
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <div className="modal-footer">
+              <div className="modal-footer" style={{ marginTop: 8 }}>
                 <button type="button" className="btn btn--ghost" onClick={() => setShowSavedModal(false)}>Cancel</button>
-                <button type="submit" className="btn btn--primary" disabled={saving || !savedForm.name.trim()}>
-                  {saving ? 'Saving...' : 'Save Audience'}
+                <button type="submit" className="btn btn--primary" disabled={saving || !savedForm.name?.trim()}>
+                  {saving ? 'Creating...' : '🎯 Save Audience to Meta'}
                 </button>
               </div>
             </form>

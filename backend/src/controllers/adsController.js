@@ -545,30 +545,49 @@ async function createLookalikeAudience(req, res) {
 
 async function createSavedAudience(req, res) {
   try {
-    const { name, description, countries = ['IN'], age_min = 18, age_max = 65, genders = [0], interests = [] } = req.body;
+    const { name, description, targeting } = req.body;
     if (!name) return res.status(400).json({ error: 'name is required' });
 
     const account = await adsRepo.getActiveAdAccount(req.orgId);
     if (!account) return res.status(404).json({ error: 'No connected Ad Account' });
 
-    const targeting = {
-      geo_locations: { countries },
-      age_min: parseInt(age_min),
-      age_max: parseInt(age_max),
-      genders,
-      publisher_platforms: ['facebook', 'instagram'],
+    const formattedTargeting = {
+      geo_locations: targeting?.geo_locations || { countries: targeting?.countries || ['IN'] },
+      age_min: parseInt(targeting?.age_min || 18),
+      age_max: parseInt(targeting?.age_max || 65),
+      genders: targeting?.genders || [0],
+      publisher_platforms: targeting?.publisher_platforms || ['facebook', 'instagram'],
+      device_platforms: targeting?.device_platforms || ['mobile', 'desktop'],
     };
 
-    if (interests && interests.length > 0) {
-      targeting.flexible_spec = [{
-        interests: interests.map(i => ({ id: i.id, name: i.name })),
+    if (targeting?.locales && targeting.locales.length > 0) {
+      formattedTargeting.locales = targeting.locales;
+    }
+
+    if (targeting?.flexible_spec && targeting.flexible_spec.length > 0) {
+      formattedTargeting.flexible_spec = targeting.flexible_spec;
+    } else if (targeting?.interests && targeting.interests.length > 0) {
+      formattedTargeting.flexible_spec = [{
+        interests: targeting.interests.map(i => ({ id: i.id, name: i.name })),
       }];
+    }
+
+    if (targeting?.exclusions) {
+      formattedTargeting.exclusions = targeting.exclusions;
+    }
+
+    if (targeting?.custom_audiences && targeting.custom_audiences.length > 0) {
+      formattedTargeting.custom_audiences = targeting.custom_audiences;
+    }
+
+    if (targeting?.excluded_custom_audiences && targeting.excluded_custom_audiences.length > 0) {
+      formattedTargeting.excluded_custom_audiences = targeting.excluded_custom_audiences;
     }
 
     const result = await metaAds.createSavedAudience(account.access_token, account.act_id, {
       name,
-      description,
-      targeting,
+      description: description || '',
+      targeting: formattedTargeting,
     });
 
     res.status(201).json({ audience: result });
@@ -597,6 +616,30 @@ async function searchInterests(req, res) {
     if (!account) return res.status(404).json({ error: 'No connected Ad Account' });
     const interests = await metaAds.searchInterests(account.access_token, req.query.q || '');
     res.json({ interests });
+  } catch (err) {
+    const detail = err.response?.data?.error?.message || err.message;
+    res.status(400).json({ error: detail });
+  }
+}
+
+async function searchGeoLocations(req, res) {
+  try {
+    const account = await adsRepo.getActiveAdAccount(req.orgId);
+    if (!account) return res.status(404).json({ error: 'No connected Ad Account' });
+    const locations = await metaAds.searchGeoLocations(account.access_token, req.query.q || '', req.query.types ? JSON.parse(req.query.types) : undefined);
+    res.json({ locations });
+  } catch (err) {
+    const detail = err.response?.data?.error?.message || err.message;
+    res.status(400).json({ error: detail });
+  }
+}
+
+async function searchTargetingCategories(req, res) {
+  try {
+    const account = await adsRepo.getActiveAdAccount(req.orgId);
+    if (!account) return res.status(404).json({ error: 'No connected Ad Account' });
+    const categories = await metaAds.searchTargetingCategories(account.access_token, req.query.q || '', req.query.class || 'interests');
+    res.json({ categories });
   } catch (err) {
     const detail = err.response?.data?.error?.message || err.message;
     res.status(400).json({ error: detail });
@@ -748,6 +791,6 @@ module.exports = {
   listAdSets, createAdSet, updateAdSet, deleteAdSet,
   listAds, updateAd, deleteAd,
   getCampaignInsights, getAccountInsights, getAccountBalance,
-  listAudiences, createCustomAudience, createLookalikeAudience, createSavedAudience, deleteAudience, searchInterests,
+  listAudiences, createCustomAudience, createLookalikeAudience, createSavedAudience, deleteAudience, searchInterests, searchGeoLocations, searchTargetingCategories,
 };
 

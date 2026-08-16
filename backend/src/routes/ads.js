@@ -49,6 +49,8 @@ router.post('/audiences/lookalike',  authenticate, ctrl.createLookalikeAudience)
 router.post('/audiences/saved',      authenticate, ctrl.createSavedAudience);
 router.delete('/audiences/:id',      authenticate, ctrl.deleteAudience);
 router.get('/interests',             authenticate, ctrl.searchInterests);
+router.get('/search/geo',            authenticate, ctrl.searchGeoLocations);
+router.get('/search/targeting',      authenticate, ctrl.searchTargetingCategories);
 
 
 module.exports = router;
