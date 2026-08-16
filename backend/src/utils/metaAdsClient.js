@@ -44,11 +44,33 @@ async function listCampaigns(accessToken, actId) {
   const r = await client(accessToken).get(`/${actId}/campaigns`, {
     params: {
       access_token: accessToken,
-      fields: 'id,name,objective,status,daily_budget,lifetime_budget,start_time,stop_time,created_time,updated_time',
+      fields: 'id,name,objective,status,daily_budget,lifetime_budget,budget_remaining,start_time,stop_time,created_time,updated_time,adsets{id,name,daily_budget,lifetime_budget,status}',
       limit: 100,
     },
   });
-  return r.data?.data || [];
+  const list = r.data?.data || [];
+
+  // If campaign-level budget is empty, derive from adsets
+  return list.map(c => {
+    let daily_budget = c.daily_budget ? parseInt(c.daily_budget) : null;
+    let lifetime_budget = c.lifetime_budget ? parseInt(c.lifetime_budget) : null;
+
+    if (!daily_budget && !lifetime_budget && c.adsets?.data?.length) {
+      const activeAdsets = c.adsets.data.filter(a => a.status !== 'DELETED' && a.status !== 'ARCHIVED');
+      const adsetDaily = activeAdsets.reduce((sum, a) => sum + (parseInt(a.daily_budget) || 0), 0);
+      const adsetLifetime = activeAdsets.reduce((sum, a) => sum + (parseInt(a.lifetime_budget) || 0), 0);
+      if (adsetDaily > 0) daily_budget = adsetDaily;
+      if (adsetLifetime > 0) lifetime_budget = adsetLifetime;
+    }
+
+    return {
+      ...c,
+      daily_budget,
+      lifetime_budget,
+      effective_budget: daily_budget || lifetime_budget || 0,
+      budget_type: daily_budget ? 'daily' : lifetime_budget ? 'lifetime' : 'none',
+    };
+  });
 }
 
 async function createCampaign(accessToken, actId, { name, objective, status = 'PAUSED', daily_budget, lifetime_budget, special_ad_categories = [] }) {

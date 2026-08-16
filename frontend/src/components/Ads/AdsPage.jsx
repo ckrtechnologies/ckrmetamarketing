@@ -273,14 +273,30 @@ function OverviewTab({ account }) {
   );
 }
 
-// ═══════════════════════════════════════════════════════════════
-//  TAB: CAMPAIGNS LIST
-// ═══════════════════════════════════════════════════════════════
+function formatBudgetDisplay(c, currency = 'INR') {
+  const sym = currency === 'INR' ? '₹' : '$';
+  if (c.daily_budget) {
+    return `${sym}${(c.daily_budget / 100).toLocaleString('en-IN')}/day`;
+  }
+  if (c.lifetime_budget) {
+    return `${sym}${(c.lifetime_budget / 100).toLocaleString('en-IN')} (Lifetime)`;
+  }
+  return '—';
+}
 
 function CampaignsTab({ account, onRefresh }) {
   const [campaigns,    setCampaigns]    = useState([]);
   const [search,       setSearch]       = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [objFilter,    setObjFilter]    = useState('');
+  const [minBudget,    setMinBudget]    = useState('');
+  const [maxBudget,    setMaxBudget]    = useState('');
+  const [showFilterPanel, setShowFilterPanel] = useState(false);
+
+  // Sorting
+  const [sortKey, setSortKey] = useState('created_time');
+  const [sortDir, setSortDir] = useState('desc'); // 'asc' | 'desc'
+
   const [loading,      setLoading]      = useState(false);
   const [error,        setError]        = useState('');
   const [expandedId,   setExpandedId]   = useState(null);
@@ -322,26 +338,72 @@ function CampaignsTab({ account, onRefresh }) {
     } catch (e) {}
   }
 
+  function handleSort(key) {
+    if (sortKey === key) {
+      setSortDir(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortKey(key);
+      setSortDir('asc');
+    }
+  }
+
+  function getSortIndicator(key) {
+    if (sortKey !== key) return <span style={{ opacity: 0.25, marginLeft: 4 }}>⇅</span>;
+    return <span style={{ color: 'var(--clr-primary)', marginLeft: 4 }}>{sortDir === 'asc' ? '▲' : '▼'}</span>;
+  }
+
+  function clearAllFilters() {
+    setSearch('');
+    setStatusFilter('');
+    setObjFilter('');
+    setMinBudget('');
+    setMaxBudget('');
+  }
+
+  const hasActiveFilters = Boolean(search || statusFilter || objFilter || minBudget || maxBudget);
+
   if (!account) return <div className="card" style={{ textAlign: 'center', padding: 48 }}><p style={{ color: 'var(--clr-text-2)' }}>Connect an Ad Account first</p></div>;
 
+  // Filter & Sort
   const filteredCampaigns = campaigns.filter(c => {
     if (statusFilter && c.status !== statusFilter) return false;
+    if (objFilter && c.objective !== objFilter) return false;
+    if (minBudget && (c.effective_budget || 0) / 100 < parseFloat(minBudget)) return false;
+    if (maxBudget && (c.effective_budget || 0) / 100 > parseFloat(maxBudget)) return false;
     if (search.trim()) {
       const q = search.toLowerCase();
       return (c.name || '').toLowerCase().includes(q) || (c.id || '').includes(q);
     }
     return true;
+  }).sort((a, b) => {
+    let aVal = a[sortKey];
+    let bVal = b[sortKey];
+
+    if (sortKey === 'budget') {
+      aVal = a.effective_budget || 0;
+      bVal = b.effective_budget || 0;
+    } else if (sortKey === 'name') {
+      aVal = (a.name || '').toLowerCase();
+      bVal = (b.name || '').toLowerCase();
+    } else if (sortKey === 'created_time') {
+      aVal = new Date(a.created_time || 0).getTime();
+      bVal = new Date(b.created_time || 0).getTime();
+    }
+
+    if (aVal < bVal) return sortDir === 'asc' ? -1 : 1;
+    if (aVal > bVal) return sortDir === 'asc' ? 1 : -1;
+    return 0;
   });
 
   return (
     <div>
-      {/* Search & Filter Bar */}
+      {/* Search & Quick Filter Bar */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flex: 1, minWidth: 260 }}>
           <input
             className="form-input"
-            style={{ maxWidth: 300, padding: '7px 12px', fontSize: 13 }}
-            placeholder="🔍 Search campaigns..."
+            style={{ maxWidth: 280, padding: '7px 12px', fontSize: 13 }}
+            placeholder="🔍 Search campaigns by name or ID..."
             value={search}
             onChange={e => setSearch(e.target.value)}
           />
@@ -356,6 +418,13 @@ function CampaignsTab({ account, onRefresh }) {
               </button>
             ))}
           </div>
+          <button
+            className={`btn btn--sm ${showFilterPanel ? 'btn--primary' : 'btn--secondary'}`}
+            onClick={() => setShowFilterPanel(prev => !prev)}
+            style={{ display: 'flex', alignItems: 'center', gap: 5 }}
+          >
+            ⚙️ Filters {hasActiveFilters && <span className="badge badge--green" style={{ fontSize: 10, padding: '2px 5px' }}>Active</span>}
+          </button>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -363,6 +432,76 @@ function CampaignsTab({ account, onRefresh }) {
           <button className="btn btn--ghost btn--sm" onClick={load} disabled={loading}>↻ Refresh</button>
         </div>
       </div>
+
+      {/* Expandable Advanced Filter Panel */}
+      {showFilterPanel && (
+        <div className="card fade-in" style={{ padding: '16px 20px', marginBottom: 18, background: 'var(--clr-surface-2)', border: '1px solid var(--clr-border)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--clr-text)' }}>🎛 Advanced Filter Panel</span>
+            {hasActiveFilters && (
+              <button className="btn btn--ghost btn--sm" onClick={clearAllFilters} style={{ fontSize: 11, padding: '2px 8px' }}>
+                ✕ Clear All Filters
+              </button>
+            )}
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="form-label" style={{ fontSize: 11 }}>Objective</label>
+              <select className="form-input" style={{ fontSize: 12, padding: '6px 10px' }} value={objFilter} onChange={e => setObjFilter(e.target.value)}>
+                <option value="">All Objectives</option>
+                {OBJECTIVES.map(o => <option key={o.key} value={o.key}>{o.icon} {o.name}</option>)}
+              </select>
+            </div>
+
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="form-label" style={{ fontSize: 11 }}>Status</label>
+              <select className="form-input" style={{ fontSize: 12, padding: '6px 10px' }} value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
+                <option value="">All Statuses</option>
+                <option value="ACTIVE">🟢 Active</option>
+                <option value="PAUSED">⏸ Paused</option>
+                <option value="DELETED">🗑 Deleted</option>
+                <option value="ARCHIVED">📦 Archived</option>
+              </select>
+            </div>
+
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="form-label" style={{ fontSize: 11 }}>Min Budget ({account.currency})</label>
+              <input
+                className="form-input"
+                type="number"
+                placeholder="e.g. 100"
+                style={{ fontSize: 12, padding: '6px 10px' }}
+                value={minBudget}
+                onChange={e => setMinBudget(e.target.value)}
+              />
+            </div>
+
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="form-label" style={{ fontSize: 11 }}>Max Budget ({account.currency})</label>
+              <input
+                className="form-input"
+                type="number"
+                placeholder="e.g. 5000"
+                style={{ fontSize: 12, padding: '6px 10px' }}
+                value={maxBudget}
+                onChange={e => setMaxBudget(e.target.value)}
+              />
+            </div>
+
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="form-label" style={{ fontSize: 11 }}>Sort By</label>
+              <select className="form-input" style={{ fontSize: 12, padding: '6px 10px' }} value={sortKey} onChange={e => setSortKey(e.target.value)}>
+                <option value="created_time">Date Created (Newest)</option>
+                <option value="name">Campaign Name (A-Z)</option>
+                <option value="budget">Budget (Amount)</option>
+                <option value="status">Status</option>
+                <option value="objective">Objective</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      )}
 
       {error && <div className="alert alert--error">{error}</div>}
 
@@ -373,10 +512,10 @@ function CampaignsTab({ account, onRefresh }) {
           <div style={{ fontSize: 40, marginBottom: 12 }}>📣</div>
           <h3>No matching campaigns</h3>
           <p style={{ color: 'var(--clr-text-2)', marginBottom: 16 }}>
-            {search || statusFilter ? 'Try clearing search or filters' : 'Create your first Click-to-WhatsApp campaign'}
+            {hasActiveFilters ? 'No campaigns match your active search or filter criteria.' : 'Create your first Click-to-WhatsApp campaign'}
           </p>
-          {(search || statusFilter) && (
-            <button className="btn btn--secondary btn--sm" onClick={() => { setSearch(''); setStatusFilter(''); }}>Clear Filters</button>
+          {hasActiveFilters && (
+            <button className="btn btn--secondary btn--sm" onClick={clearAllFilters}>Clear All Filters</button>
           )}
         </div>
       ) : (
@@ -384,16 +523,26 @@ function CampaignsTab({ account, onRefresh }) {
           <table className="table">
             <thead>
               <tr>
-                <th>Campaign</th>
-                <th>Objective</th>
-                <th>Daily Budget</th>
-                <th>Status</th>
+                <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('name')}>
+                  Campaign {getSortIndicator('name')}
+                </th>
+                <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('objective')}>
+                  Objective {getSortIndicator('objective')}
+                </th>
+                <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('budget')}>
+                  Budget {getSortIndicator('budget')}
+                </th>
+                <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('status')}>
+                  Status {getSortIndicator('status')}
+                </th>
+                <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('created_time')}>
+                  Created {getSortIndicator('created_time')}
+                </th>
                 <th style={{ textAlign: 'right' }}>Actions</th>
               </tr>
             </thead>
             <tbody>
               {filteredCampaigns.map(c => (
-
                 <React.Fragment key={c.id}>
                   <tr>
                     <td>
@@ -407,11 +556,14 @@ function CampaignsTab({ account, onRefresh }) {
                       </span>
                     </td>
                     <td>
-                      <span style={{ fontFamily: 'monospace', fontWeight: 700 }}>
-                        {formatBudgetFromPaise(c.daily_budget, account.currency)}/day
+                      <span style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--clr-text)' }}>
+                        {formatBudgetDisplay(c, account.currency)}
                       </span>
                     </td>
                     <td><StatusPill status={c.status} /></td>
+                    <td style={{ fontSize: 11, color: 'var(--clr-text-3)' }}>
+                      {c.created_time ? new Date(c.created_time).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}
+                    </td>
                     <td style={{ textAlign: 'right' }}>
                       <div style={{ display: 'inline-flex', gap: 6 }}>
                         <button className="btn btn--secondary btn--sm" style={{ fontSize: 11, padding: '3px 8px' }} onClick={() => loadInsights(c)}>
@@ -435,7 +587,7 @@ function CampaignsTab({ account, onRefresh }) {
                   {/* Inline Insights Row */}
                   {expandedId === c.id && insights[c.id] && (
                     <tr>
-                      <td colSpan={5} style={{ background: 'rgba(37,211,102,.04)', padding: '16px 20px' }}>
+                      <td colSpan={6} style={{ background: 'rgba(37,211,102,.04)', padding: '16px 20px' }}>
                         {insights[c.id].totals ? (
                           <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
                             {[
