@@ -1,45 +1,41 @@
-// ── Meta Cloud API Webhook Handler ────────────────────────────────────────────
+const { updateRecipientByWamid, logDelivery } = require('../repositories/campaignRepo');
+
 const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN || 'ckrmetamarketing_verify_token';
 
-// GET /api/v2/webhook  — verification handshake
+// GET — Meta webhook verification
 function verify(req, res) {
   const mode      = req.query['hub.mode'];
   const token     = req.query['hub.verify_token'];
   const challenge = req.query['hub.challenge'];
 
   if (mode === 'subscribe' && token === VERIFY_TOKEN) {
-    console.log('[webhook] ✅ Webhook verified');
+    console.log('[webhook] ✅ Verified');
     return res.status(200).send(challenge);
   }
-  console.warn('[webhook] ❌ Verification failed', { mode, token });
   return res.status(403).json({ error: 'Forbidden' });
 }
 
-// POST /api/v2/webhook  — receive Meta events
+// POST — Receive Meta events
 async function receive(req, res) {
   try {
     const body = req.body;
     if (body.object !== 'whatsapp_business_account') {
-      return res.status(404).json({ error: 'Not a WhatsApp event' });
+      return res.status(404).json({ error: 'Not a WABA event' });
     }
 
-    // Always acknowledge immediately
     res.status(200).json({ received: true });
 
-    // Process asynchronously
     for (const entry of (body.entry || [])) {
       for (const change of (entry.changes || [])) {
         const value = change.value;
         if (!value) continue;
 
-        // ── Inbound Messages ────────────────────────────────
         if (value.messages?.length) {
           for (const msg of value.messages) {
             await handleInboundMessage(value, msg);
           }
         }
 
-        // ── Delivery Status Updates ──────────────────────────
         if (value.statuses?.length) {
           for (const status of value.statuses) {
             await handleStatusUpdate(status);
@@ -53,29 +49,30 @@ async function receive(req, res) {
 }
 
 async function handleInboundMessage(value, msg) {
-  const from        = msg.from;
-  const wabaPhoneId = value.metadata?.phone_number_id;
-  const msgId       = msg.id;
-  const text        = msg.text?.body || msg.type || '';
-  const timestamp   = new Date(parseInt(msg.timestamp) * 1000).toISOString();
-
-  console.log(`[webhook:message] From: ${from} | "${text}" | WABA: ${wabaPhoneId}`);
-
-  // TODO Phase 3: persist to conversations + messages table in Supabase
-  // TODO Phase 3: auto-reply logic
+  const from = msg.from;
+  const text = msg.text?.body || `[${msg.type}]`;
+  console.log(`[webhook:inbound] From: +${from} | "${text.substring(0, 60)}"`);
+  // Phase 3: persist to conversations + messages
 }
 
 async function handleStatusUpdate(status) {
-  const wamid     = status.id;
-  const newStatus = status.status;          // sent | delivered | read | failed
-  const timestamp = new Date(parseInt(status.timestamp) * 1000).toISOString();
-  const errorCode = status.errors?.[0]?.code;
-  const errorMsg  = status.errors?.[0]?.title;
+  const { id: wamid, status: newStatus, timestamp, errors } = status;
+  const error_code = errors?.[0]?.code ? String(errors[0].code) : null;
+  const error_msg  = errors?.[0]?.title || null;
 
-  console.log(`[webhook:status] WAMID: ${wamid} → ${newStatus} ${errorCode ? `(err: ${errorCode})` : ''}`);
+  console.log(`[webhook:status] ${wamid} → ${newStatus} ${error_code ? `(err ${error_code})` : ''}`);
 
-  // TODO Phase 2: update campaign_recipients.status in Supabase
-  // TODO Phase 2: update delivery_logs table
+  // ── Persist delivery log ──────────────────────────────────
+  await logDelivery({ wamid, status: newStatus, error_code, error_msg });
+
+  // ── Update campaign recipient row ─────────────────────────
+  const ts = {};
+  if (newStatus === 'sent')      ts.sent_at      = new Date(parseInt(timestamp) * 1000).toISOString();
+  if (newStatus === 'delivered') ts.delivered_at = new Date(parseInt(timestamp) * 1000).toISOString();
+  if (newStatus === 'read')      ts.read_at      = new Date(parseInt(timestamp) * 1000).toISOString();
+  if (newStatus === 'failed')    ts.failed_at    = new Date(parseInt(timestamp) * 1000).toISOString();
+
+  await updateRecipientByWamid(wamid, { status: newStatus, ...ts, error_code, error_msg });
 }
 
 module.exports = { verify, receive };

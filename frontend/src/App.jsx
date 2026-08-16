@@ -3,12 +3,12 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { getMe, isLoggedIn } from './api/auth.js';
 import Layout from './components/Layout/Layout.jsx';
 
-// ── Lazy page imports ────────────────────────────────────────────
-import AuthPage   from './components/Auth/AuthPage.jsx';
-import Dashboard  from './components/Dashboard/Dashboard.jsx';
-import WABAPage   from './components/WhatsApp/WABAPage.jsx';
+import AuthPage      from './components/Auth/AuthPage.jsx';
+import Dashboard     from './components/Dashboard/Dashboard.jsx';
+import WABAPage      from './components/WhatsApp/WABAPage.jsx';
+import ContactsPage  from './components/Contacts/ContactsPage.jsx';
+import CampaignList  from './components/Campaign/CampaignList.jsx';
 
-// ── Placeholder pages (to build in later phases) ─────────────────
 const Placeholder = ({ name }) => (
   <div className="card fade-in" style={{ textAlign: 'center', padding: '60px 20px' }}>
     <div style={{ fontSize: 48, marginBottom: 12 }}>🚧</div>
@@ -61,19 +61,19 @@ export default function App() {
             <Dashboard user={user} org={org} />
           </ProtectedRoute>
         } />
-        <Route path="/waba" element={
-          <ProtectedRoute user={user} org={org} title="WhatsApp Numbers">
-            <WABAPage />
-          </ProtectedRoute>
-        } />
         <Route path="/campaigns" element={
           <ProtectedRoute user={user} org={org} title="Campaigns">
-            <Placeholder name="Campaigns — Phase 2" />
+            <CampaignList />
           </ProtectedRoute>
         } />
         <Route path="/contacts" element={
           <ProtectedRoute user={user} org={org} title="Contacts">
-            <Placeholder name="Contacts — Phase 2" />
+            <ContactsPage />
+          </ProtectedRoute>
+        } />
+        <Route path="/waba" element={
+          <ProtectedRoute user={user} org={org} title="WhatsApp Numbers">
+            <WABAPage />
           </ProtectedRoute>
         } />
         <Route path="/chat" element={

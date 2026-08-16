@@ -1,0 +1,193 @@
+const campaignRepo = require('../repositories/campaignRepo');
+const contactRepo  = require('../repositories/contactRepo');
+const orgRepo      = require('../repositories/orgRepo');
+const { sendTemplate } = require('../utils/metaClient');
+
+// ── CRUD ──────────────────────────────────────────────────────
+
+async function listCampaigns(req, res) {
+  try {
+    const { status, limit = 50, offset = 0 } = req.query;
+    const result = await campaignRepo.getCampaigns(req.orgId, { status, limit: +limit, offset: +offset });
+    res.json(result);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+}
+
+async function getCampaign(req, res) {
+  try {
+    const campaign = await campaignRepo.getCampaignById(req.orgId, req.params.id);
+    const stats    = await campaignRepo.getCampaignStats(req.params.id);
+    res.json({ campaign, stats });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+}
+
+async function createCampaign(req, res) {
+  try {
+    const { name, waba_id, template_name, template_lang, scheduled_at, group_id, recipients } = req.body;
+    if (!name || !waba_id || !template_name) {
+      return res.status(400).json({ error: 'name, waba_id, and template_name are required' });
+    }
+
+    const campaign = await campaignRepo.createCampaign({
+      org_id: req.orgId, waba_id, name, template_name, template_lang, scheduled_at, created_by: req.user.id,
+    });
+
+    // Attach recipients from a group or explicit list
+    let recipientRows = [];
+    if (group_id) {
+      const contacts = await contactRepo.getContactsByGroup(req.orgId, group_id);
+      recipientRows = contacts.map(c => ({
+        contact_id: c.id,
+        phone: c.phone,
+        variables: recipients?.variableMap || null,
+      }));
+    } else if (recipients?.phones?.length) {
+      recipientRows = recipients.phones.map(phone => ({
+        contact_id: null,
+        phone: phone.replace(/\D/g, ''),
+        variables: null,
+      }));
+    }
+
+    if (recipientRows.length > 0) {
+      await campaignRepo.addRecipients(campaign.id, recipientRows);
+      await campaignRepo.updateCampaign(req.orgId, campaign.id, { total_recipients: recipientRows.length });
+    }
+
+    res.status(201).json({ campaign, recipientsAdded: recipientRows.length });
+  } catch (err) {
+    console.error('[createCampaign]', err);
+    res.status(500).json({ error: err.message });
+  }
+}
+
+async function updateCampaign(req, res) {
+  try {
+    const campaign = await campaignRepo.updateCampaign(req.orgId, req.params.id, req.body);
+    res.json({ campaign });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+}
+
+async function deleteCampaign(req, res) {
+  try {
+    const campaign = await campaignRepo.getCampaignById(req.orgId, req.params.id);
+    if (['running'].includes(campaign.status)) {
+      return res.status(400).json({ error: 'Cannot delete a running campaign. Pause it first.' });
+    }
+    await campaignRepo.deleteCampaign(req.orgId, req.params.id);
+    res.json({ message: 'Campaign deleted' });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+}
+
+// ── Launch ────────────────────────────────────────────────────
+
+async function launchCampaign(req, res) {
+  try {
+    const campaign = await campaignRepo.getCampaignById(req.orgId, req.params.id);
+    if (!['draft', 'paused'].includes(campaign.status)) {
+      return res.status(400).json({ error: `Campaign is already ${campaign.status}` });
+    }
+
+    // Get WABA credentials
+    const wabaAccounts = await orgRepo.getWabaAccounts(req.orgId);
+    const waba = wabaAccounts.find(a => a.id === campaign.waba_id);
+    if (!waba) return res.status(404).json({ error: 'WABA account not found' });
+
+    // Mark running
+    await campaignRepo.updateCampaign(req.orgId, campaign.id, { status: 'running', started_at: new Date().toISOString() });
+
+    // Acknowledge immediately, send async
+    res.json({ message: 'Campaign launched', campaignId: campaign.id });
+
+    // ── Async bulk send ───────────────────────────────────────
+    const pending = await campaignRepo.getPendingRecipients(campaign.id);
+    console.log(`[campaign:launch] Sending to ${pending.length} recipients — campaign: ${campaign.name}`);
+
+    let sent = 0, failed = 0;
+    const RATE_DELAY_MS = 100; // ~10 msg/sec
+
+    for (const recipient of pending) {
+      try {
+        // Build components from variables
+        const components = [];
+        if (recipient.variables && Object.keys(recipient.variables).length > 0) {
+          const params = Object.values(recipient.variables).map(v => ({ type: 'text', text: String(v) }));
+          components.push({ type: 'body', parameters: params });
+        }
+
+        const result = await sendTemplate(
+          waba.phone_number_id,
+          waba.access_token,
+          recipient.phone,
+          campaign.template_name,
+          campaign.template_lang,
+          components
+        );
+
+        if (result.success) {
+          const wamid = result.data?.messages?.[0]?.id;
+          await campaignRepo.updateRecipientStatus(recipient.id, 'sent', { wamid });
+          sent++;
+        } else {
+          await campaignRepo.updateRecipientStatus(recipient.id, 'failed', {
+            error_code: String(result.code || ''),
+            error_msg:  result.error,
+          });
+          failed++;
+        }
+
+        await new Promise(r => setTimeout(r, RATE_DELAY_MS));
+      } catch (err) {
+        await campaignRepo.updateRecipientStatus(recipient.id, 'failed', { error_msg: err.message });
+        failed++;
+      }
+    }
+
+    // Mark completed
+    await campaignRepo.updateCampaign(req.orgId, campaign.id, {
+      status: 'completed',
+      completed_at: new Date().toISOString(),
+    });
+    console.log(`[campaign:done] ${campaign.name} — sent: ${sent}, failed: ${failed}`);
+  } catch (err) {
+    console.error('[launchCampaign]', err);
+    await campaignRepo.updateCampaign(req.orgId, req.params.id, { status: 'failed' }).catch(() => {});
+  }
+}
+
+async function pauseCampaign(req, res) {
+  try {
+    const campaign = await campaignRepo.updateCampaign(req.orgId, req.params.id, { status: 'paused' });
+    res.json({ campaign });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+}
+
+// ── Reports ───────────────────────────────────────────────────
+
+async function getCampaignReport(req, res) {
+  try {
+    const { limit = 500, offset = 0, status } = req.query;
+    const campaign = await campaignRepo.getCampaignById(req.orgId, req.params.id);
+    const stats    = await campaignRepo.getCampaignStats(req.params.id);
+    const { recipients, total } = await campaignRepo.getRecipients(req.params.id, { limit: +limit, offset: +offset, status });
+    res.json({ campaign, stats, recipients, total });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+}
+
+async function exportCampaignCSV(req, res) {
+  try {
+    const campaign = await campaignRepo.getCampaignById(req.orgId, req.params.id);
+    const { recipients } = await campaignRepo.getRecipients(req.params.id, { limit: 10000 });
+
+    const header = 'phone,status,sent_at,delivered_at,read_at,failed_at,error_code,error_msg\n';
+    const rows = recipients.map(r =>
+      [r.phone, r.status, r.sent_at || '', r.delivered_at || '', r.read_at || '', r.failed_at || '', r.error_code || '', r.error_msg || ''].join(',')
+    ).join('\n');
+
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="${campaign.name}-report.csv"`);
+    res.send(header + rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+}
+
+module.exports = { listCampaigns, getCampaign, createCampaign, updateCampaign, deleteCampaign, launchCampaign, pauseCampaign, getCampaignReport, exportCampaignCSV };
