@@ -1,5 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { listGroups, createGroup, deleteGroup, listContacts, createContact, updateContact, deleteContact, importCSV } from '../../api/contacts.js';
+import { useNavigate } from 'react-router-dom';
+import {
+  listGroups, createGroup, updateGroup, deleteGroup,
+  listContacts, listTags, createContact, updateContact, deleteContact,
+  bulkDeleteContacts, bulkUpdateGroup, bulkUpdateStatus, importCSV
+} from '../../api/contacts.js';
 import './Contacts.css';
 
 const VERTICALS = ['school', 'ecomm', 'fintech', 'clinic', 'real-estate', 'edtech', 'retail', 'other'];
@@ -25,29 +30,50 @@ function normalizeInputPreview(phone) {
 }
 
 export default function ContactsPage() {
-  const [groups,       setGroups]       = useState([]);
-  const [contacts,     setContacts]     = useState([]);
-  const [total,        setTotal]        = useState(0);
-  const [activeGroup,  setActiveGroup]  = useState(null);
-  const [search,       setSearch]       = useState('');
-  const [loading,      setLoading]      = useState(true);
-  
-  const [showAddGroup, setShowAddGroup] = useState(false);
-  const [showAddContact, setShowAddContact] = useState(false);
-  const [editingContact, setEditingContact] = useState(null);
-  
-  const [groupForm,    setGroupForm]    = useState({ name: '', vertical: '' });
-  const [contactForm,  setContactForm]  = useState({ name: '', phone: '', group_id: '', tags: '' });
-  const [editForm,     setEditForm]     = useState({ id: '', name: '', phone: '', group_id: '', tags: '', opted_out: false });
-  
+  const navigate = useNavigate();
+
+  const [groups,        setGroups]        = useState([]);
+  const [availableTags, setAvailableTags] = useState([]);
+  const [contacts,      setContacts]      = useState([]);
+  const [total,         setTotal]         = useState(0);
+  const [activeGroup,   setActiveGroup]   = useState(null);
+  const [search,        setSearch]        = useState('');
+  const [statusFilter,  setStatusFilter]  = useState('');
+  const [tagFilter,     setTagFilter]     = useState('');
+  const [loading,       setLoading]       = useState(true);
+
+  // Selection for bulk actions
+  const [selectedIds, setSelectedIds] = useState([]);
+
+  // Modals
+  const [showAddGroup,     setShowAddGroup]     = useState(false);
+  const [editingGroup,     setEditingGroup]     = useState(null);
+  const [showAddContact,   setShowAddContact]   = useState(false);
+  const [editingContact,   setEditingContact]   = useState(null);
+  const [showBulkGroupModal, setShowBulkGroupModal] = useState(false);
+  const [bulkTargetGroup,  setBulkTargetGroup]  = useState('');
+
+  // Forms
+  const [groupForm,   setGroupForm]   = useState({ name: '', vertical: '' });
+  const [contactForm, setContactForm] = useState({ name: '', phone: '', group_id: '', tags: '', city: '' });
+  const [editForm,    setEditForm]    = useState({ id: '', name: '', phone: '', group_id: '', tags: '', opted_out: false, city: '' });
+
+  // Import / Export
   const [importing,    setImporting]    = useState(false);
   const [importResult, setImportResult] = useState(null);
   const [error,        setError]        = useState('');
   const [saving,       setSaving]       = useState(false);
   const fileRef = useRef();
 
-  useEffect(() => { loadGroups(); }, []);
-  useEffect(() => { loadContacts(); }, [activeGroup, search]);
+  useEffect(() => {
+    loadGroups();
+    loadTags();
+  }, []);
+
+  useEffect(() => {
+    loadContacts();
+    setSelectedIds([]);
+  }, [activeGroup, search, statusFilter, tagFilter]);
 
   async function loadGroups() {
     try {
@@ -56,12 +82,22 @@ export default function ContactsPage() {
     } catch (e) { setError(e.message); }
   }
 
+  async function loadTags() {
+    try {
+      const data = await listTags();
+      setAvailableTags(data.tags || []);
+    } catch (e) {}
+  }
+
   async function loadContacts() {
     setLoading(true);
     try {
-      const params = { limit: 100 };
+      const params = { limit: 200 };
       if (activeGroup) params.group_id = activeGroup;
-      if (search) params.search = search;
+      if (search.trim()) params.search = search.trim();
+      if (statusFilter) params.status = statusFilter;
+      if (tagFilter) params.tag = tagFilter;
+
       const data = await listContacts(params);
       setContacts(data.contacts || []);
       setTotal(data.total || 0);
@@ -69,22 +105,48 @@ export default function ContactsPage() {
     finally { setLoading(false); }
   }
 
+  // ── Group Actions ───────────────────────────────────────────
   async function handleCreateGroup(e) {
     e.preventDefault();
+    setSaving(true);
     try {
       await createGroup(groupForm);
       setShowAddGroup(false);
       setGroupForm({ name: '', vertical: '' });
       loadGroups();
     } catch (e) { setError(e.message); }
+    finally { setSaving(false); }
+  }
+
+  function startEditGroup(g) {
+    setEditingGroup(g);
+    setGroupForm({ name: g.name || '', vertical: g.vertical || '' });
+  }
+
+  async function handleUpdateGroup(e) {
+    e.preventDefault();
+    if (!editingGroup) return;
+    setSaving(true);
+    try {
+      await updateGroup(editingGroup.id, groupForm);
+      setEditingGroup(null);
+      setGroupForm({ name: '', vertical: '' });
+      loadGroups();
+    } catch (e) { setError(e.message); }
+    finally { setSaving(false); }
   }
 
   async function handleDeleteGroup(id) {
-    if (!confirm('Delete this group? Contacts will NOT be deleted.')) return;
-    try { await deleteGroup(id); loadGroups(); if (activeGroup === id) setActiveGroup(null); }
-    catch (e) { alert(e.message); }
+    if (!confirm('Delete this group? (Contacts inside will NOT be deleted, only unassigned)')) return;
+    try {
+      await deleteGroup(id);
+      loadGroups();
+      if (activeGroup === id) setActiveGroup(null);
+      loadContacts();
+    } catch (e) { alert(e.message); }
   }
 
+  // ── Contact Single Actions ──────────────────────────────────
   async function handleCreateContact(e) {
     e.preventDefault();
     setSaving(true);
@@ -95,10 +157,13 @@ export default function ContactsPage() {
         phone: contactForm.phone.trim(),
         group_id: contactForm.group_id || activeGroup || null,
         tags: contactForm.tags ? contactForm.tags.split(',').map(t => t.trim()).filter(Boolean) : null,
+        metadata: contactForm.city.trim() ? { city: contactForm.city.trim() } : undefined,
       });
       setShowAddContact(false);
-      setContactForm({ name: '', phone: '', group_id: '', tags: '' });
+      setContactForm({ name: '', phone: '', group_id: '', tags: '', city: '' });
       loadContacts();
+      loadGroups();
+      loadTags();
     } catch (e) { setError(e.message); }
     finally { setSaving(false); }
   }
@@ -112,6 +177,7 @@ export default function ContactsPage() {
       group_id: c.group_id || '',
       tags: Array.isArray(c.tags) ? c.tags.join(', ') : (c.tags || ''),
       opted_out: Boolean(c.opted_out),
+      city: c.metadata?.city || '',
     });
   }
 
@@ -126,17 +192,110 @@ export default function ContactsPage() {
         group_id: editForm.group_id || null,
         tags: editForm.tags ? editForm.tags.split(',').map(t => t.trim()).filter(Boolean) : [],
         opted_out: editForm.opted_out,
+        metadata: editForm.city.trim() ? { city: editForm.city.trim() } : null,
       });
       setEditingContact(null);
       loadContacts();
+      loadGroups();
+      loadTags();
     } catch (e) { setError(e.message); }
     finally { setSaving(false); }
   }
 
   async function handleDeleteContact(id) {
     if (!confirm('Delete this contact?')) return;
-    try { await deleteContact(id); loadContacts(); }
-    catch (e) { alert(e.message); }
+    try {
+      await deleteContact(id);
+      loadContacts();
+      loadGroups();
+    } catch (e) { alert(e.message); }
+  }
+
+  // ── Multi-select Bulk Actions ───────────────────────────────
+  function toggleSelectAll() {
+    if (selectedIds.length === contacts.length) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(contacts.map(c => c.id));
+    }
+  }
+
+  function toggleSelectContact(id) {
+    setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  }
+
+  async function handleBulkDelete() {
+    if (!confirm(`Are you sure you want to delete ${selectedIds.length} selected contacts?`)) return;
+    try {
+      await bulkDeleteContacts(selectedIds);
+      setSelectedIds([]);
+      loadContacts();
+      loadGroups();
+    } catch (e) { alert(e.message); }
+  }
+
+  async function handleBulkMoveGroup(e) {
+    e.preventDefault();
+    try {
+      await bulkUpdateGroup(selectedIds, bulkTargetGroup || null);
+      setShowBulkGroupModal(false);
+      setSelectedIds([]);
+      loadContacts();
+      loadGroups();
+    } catch (e) { alert(e.message); }
+  }
+
+  async function handleBulkStatus(opted_out) {
+    try {
+      await bulkUpdateStatus(selectedIds, opted_out);
+      setSelectedIds([]);
+      loadContacts();
+    } catch (e) { alert(e.message); }
+  }
+
+  // ── Import / Export CSV ─────────────────────────────────────
+  function downloadSampleCSV() {
+    const csvContent = "name,phone,tags,city\nRahul Sharma,919876543210,\"vip,lead\",Delhi\nPriya Patel,7982296878,\"customer,ecomm\",Mumbai\nDr. Amit Verma,+919811122233,\"clinic,doctor\",Bangalore\nSneha Gupta,9822334455,school,Pune\n";
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'contacts_sample_template.csv';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+
+  function exportContactsToCSV() {
+    const targetContacts = selectedIds.length > 0
+      ? contacts.filter(c => selectedIds.includes(c.id))
+      : contacts;
+
+    if (targetContacts.length === 0) {
+      alert('No contacts to export.');
+      return;
+    }
+
+    const headers = ['Name', 'Phone', 'Group', 'Tags', 'City', 'Status', 'Created At'];
+    const rows = targetContacts.map(c => [
+      `"${(c.name || '').replace(/"/g, '""')}"`,
+      `"${c.phone || ''}"`,
+      `"${(c.contact_groups?.name || '').replace(/"/g, '""')}"`,
+      `"${(Array.isArray(c.tags) ? c.tags.join(', ') : '').replace(/"/g, '""')}"`,
+      `"${(c.metadata?.city || '').replace(/"/g, '""')}"`,
+      `"${c.opted_out ? 'Opted Out' : 'Active'}"`,
+      `"${c.created_at || ''}"`,
+    ]);
+
+    const csvData = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const blob = new Blob([csvData], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `contacts_export_${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   }
 
   async function handleFileImport(e) {
@@ -146,37 +305,30 @@ export default function ContactsPage() {
     try {
       const result = await importCSV(file, activeGroup);
       setImportResult(result);
-      loadContacts(); loadGroups();
+      loadContacts();
+      loadGroups();
+      loadTags();
     } catch (e) { setError(e.message); }
     finally { setImporting(false); e.target.value = ''; }
-  }
-
-  function downloadSampleCSV() {
-    const csvContent = "name,phone,tags,city\nRahul Sharma,919876543210,\"vip,lead\",Delhi\nPriya Patel,7982296878,\"customer,ecomm\",Mumbai\nDr. Amit Verma,+919811122233,\"clinic,doctor\",Bangalore\nSneha Gupta,9822334455,school,Pune\n";
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.setAttribute('href', url);
-    link.setAttribute('download', 'contacts_sample_template.csv');
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
   }
 
   return (
     <div className="contacts-page fade-in">
       <div className="page-header">
         <div>
-          <h1>👥 Contacts</h1>
-          <p>{total.toLocaleString()} contacts {activeGroup ? 'in this group' : 'total'}</p>
+          <h1>👥 Contact Management</h1>
+          <p>{total.toLocaleString()} total contacts in CRM</p>
         </div>
         <div className="page-header__actions">
           <button className="btn btn--ghost btn--sm" onClick={downloadSampleCSV} title="Download ready-to-use CSV template">
             📥 Sample CSV
           </button>
+          <button className="btn btn--ghost btn--sm" onClick={exportContactsToCSV} title="Export contacts to CSV">
+            📤 Export CSV
+          </button>
           <input ref={fileRef} type="file" accept=".csv" style={{ display: 'none' }} onChange={handleFileImport} />
           <button className="btn btn--secondary btn--sm" onClick={() => fileRef.current?.click()} disabled={importing}>
-            {importing ? '⏳ Importing...' : '📤 Import CSV'}
+            {importing ? '⏳ Importing...' : '📥 Import CSV'}
           </button>
           <button className="btn btn--secondary btn--sm" onClick={() => setShowAddGroup(true)}>+ Group</button>
           <button className="btn btn--primary btn--sm" onClick={() => setShowAddContact(true)}>+ Contact</button>
@@ -189,7 +341,16 @@ export default function ContactsPage() {
       <div className="contacts-layout">
         {/* Sidebar: Groups */}
         <aside className="contacts-groups">
-          <div className="contacts-groups__header">Groups</div>
+          <div className="contacts-groups__header">
+            <span>Groups</span>
+            <button
+              className="btn btn--ghost btn--sm"
+              style={{ padding: '2px 6px', fontSize: 11, color: 'var(--clr-primary)' }}
+              onClick={() => setShowAddGroup(true)}
+            >
+              + Add
+            </button>
+          </div>
           <div
             className={`contacts-groups__item${!activeGroup ? ' contacts-groups__item--active' : ''}`}
             onClick={() => setActiveGroup(null)}
@@ -197,6 +358,7 @@ export default function ContactsPage() {
             <span>📋 All Contacts</span>
             <span className="badge badge--gray">{total}</span>
           </div>
+
           {groups.map(g => (
             <div
               key={g.id}
@@ -204,89 +366,238 @@ export default function ContactsPage() {
               onClick={() => setActiveGroup(g.id)}
             >
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 600, fontSize: 12.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{g.name}</div>
+                <div style={{ fontWeight: 600, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {g.name}
+                </div>
                 {g.vertical && <div style={{ fontSize: 10, color: 'var(--clr-text-3)', textTransform: 'capitalize' }}>{g.vertical}</div>}
               </div>
-              <button className="contacts-groups__del" onClick={e => { e.stopPropagation(); handleDeleteGroup(g.id); }}>✕</button>
+
+              <span className="badge badge--gray" style={{ fontSize: 10 }}>
+                {g.contact_count ?? 0}
+              </span>
+
+              <div className="contacts-groups__actions">
+                <button
+                  className="contacts-groups__btn"
+                  title="Edit Group"
+                  onClick={e => { e.stopPropagation(); startEditGroup(g); }}
+                >
+                  ✏️
+                </button>
+                <button
+                  className="contacts-groups__btn contacts-groups__btn--del"
+                  title="Delete Group"
+                  onClick={e => { e.stopPropagation(); handleDeleteGroup(g.id); }}
+                >
+                  ✕
+                </button>
+              </div>
             </div>
           ))}
         </aside>
 
-        {/* Main: Contacts Table */}
+        {/* Main Contacts Area */}
         <div className="contacts-main">
-          <div className="contacts-search-bar">
+          {/* Advanced Filter Bar */}
+          <div className="contacts-filter-bar">
             <input
-              className="form-input"
+              className="form-input contacts-search-input"
               type="text"
-              placeholder="🔍 Search by name or phone..."
+              placeholder="🔍 Search by name, phone number, city..."
               value={search}
               onChange={e => setSearch(e.target.value)}
             />
+
+            {/* Status Filter */}
+            <select
+              className="form-input contacts-filter-select"
+              value={statusFilter}
+              onChange={e => setStatusFilter(e.target.value)}
+            >
+              <option value="">All Statuses</option>
+              <option value="active">Active Only</option>
+              <option value="opted_out">Opted Out</option>
+            </select>
+
+            {/* Tag Filter */}
+            {availableTags.length > 0 && (
+              <select
+                className="form-input contacts-filter-select"
+                value={tagFilter}
+                onChange={e => setTagFilter(e.target.value)}
+              >
+                <option value="">All Tags</option>
+                {availableTags.map(t => (
+                  <option key={t} value={t}>🏷️ {t}</option>
+                ))}
+              </select>
+            )}
+
+            {(search || statusFilter || tagFilter) && (
+              <button
+                className="btn btn--ghost btn--sm"
+                onClick={() => { setSearch(''); setStatusFilter(''); setTagFilter(''); }}
+              >
+                Clear Filters
+              </button>
+            )}
           </div>
 
+          {/* Bulk Actions Toolbar (Visible when 1+ selected) */}
+          {selectedIds.length > 0 && (
+            <div className="contacts-bulk-bar">
+              <div className="contacts-bulk-count">
+                <span>☑️</span>
+                <span>{selectedIds.length} contact{selectedIds.length > 1 ? 's' : ''} selected</span>
+              </div>
+              <div className="contacts-bulk-actions">
+                <button className="btn btn--secondary btn--sm" onClick={() => setShowBulkGroupModal(true)}>
+                  📁 Move to Group
+                </button>
+                <button className="btn btn--secondary btn--sm" onClick={() => handleBulkStatus(false)}>
+                  ✅ Mark Active
+                </button>
+                <button className="btn btn--secondary btn--sm" onClick={() => handleBulkStatus(true)}>
+                  🚫 Mark Opt-Out
+                </button>
+                <button className="btn btn--secondary btn--sm" onClick={exportContactsToCSV}>
+                  📤 Export ({selectedIds.length})
+                </button>
+                <button className="btn btn--danger btn--sm" onClick={handleBulkDelete}>
+                  🗑️ Delete Selected
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Contacts Table */}
           {loading ? (
             <div className="loading-center"><div className="spinner" /></div>
           ) : contacts.length === 0 ? (
-            <div className="card" style={{ textAlign: 'center', padding: '48px 20px' }}>
-              <div style={{ fontSize: 40, marginBottom: 12 }}>📭</div>
-              <h3 style={{ marginBottom: 8 }}>No contacts found</h3>
-              <p style={{ color: 'var(--clr-text-2)' }}>Import a CSV or add contacts manually.</p>
+            <div className="card" style={{ textAlign: 'center', padding: '56px 20px' }}>
+              <div style={{ fontSize: 44, marginBottom: 14 }}>📭</div>
+              <h3 style={{ marginBottom: 8, fontSize: 16 }}>No contacts found</h3>
+              <p style={{ color: 'var(--clr-text-2)', marginBottom: 16 }}>
+                {search || statusFilter || tagFilter
+                  ? 'No contacts match the current search or filters.'
+                  : 'Import a CSV list or add your first contact manually.'
+                }
+              </p>
+              <button className="btn btn--primary" onClick={() => setShowAddContact(true)}>
+                + Add Contact
+              </button>
             </div>
           ) : (
             <div className="table-wrap">
               <table className="table">
                 <thead>
                   <tr>
-                    <th>Name</th>
+                    <th style={{ width: 36, textAlign: 'center' }}>
+                      <input
+                        type="checkbox"
+                        className="contact-checkbox"
+                        checked={selectedIds.length > 0 && selectedIds.length === contacts.length}
+                        onChange={toggleSelectAll}
+                        title="Select All"
+                      />
+                    </th>
+                    <th>Contact</th>
                     <th>Phone Number</th>
+                    <th>Group</th>
                     <th>Tags</th>
                     <th>Status</th>
                     <th style={{ textAlign: 'right' }}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {contacts.map(c => (
-                    <tr key={c.id}>
-                      <td style={{ fontWeight: 600 }}>{c.name || <span style={{ color: 'var(--clr-text-3)' }}>—</span>}</td>
-                      <td>
-                        <span style={{ fontFamily: 'monospace', fontSize: 13, fontWeight: 700, color: 'var(--clr-text)' }}>
-                          {formatPhoneDisplay(c.phone)}
-                        </span>
-                      </td>
-                      <td>
-                        {(c.tags && c.tags.length > 0)
-                          ? c.tags.map(t => <span key={t} className="badge badge--blue" style={{ marginRight: 4, fontSize: 10 }}>{t}</span>)
-                          : <span style={{ color: 'var(--clr-text-3)', fontSize: 12 }}>—</span>
-                        }
-                      </td>
-                      <td>
-                        {c.opted_out
-                          ? <span className="badge badge--red">Opted Out</span>
-                          : <span className="badge badge--green">Active</span>
-                        }
-                      </td>
-                      <td style={{ textAlign: 'right' }}>
-                        <div style={{ display: 'inline-flex', gap: 6 }}>
-                          <button
-                            className="btn btn--secondary btn--sm"
-                            style={{ padding: '3px 9px', fontSize: 11 }}
-                            onClick={() => startEditContact(c)}
-                            title="Edit Contact"
-                          >
-                            ✏️ Edit
-                          </button>
-                          <button
-                            className="btn btn--danger btn--sm"
-                            style={{ padding: '3px 8px', fontSize: 11 }}
-                            onClick={() => handleDeleteContact(c.id)}
-                            title="Delete Contact"
-                          >
-                            ✕
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                  {contacts.map(c => {
+                    const isSelected = selectedIds.includes(c.id);
+                    const initial = (c.name || 'U').charAt(0).toUpperCase();
+
+                    return (
+                      <tr key={c.id} style={{ background: isSelected ? 'rgba(37,211,102,0.06)' : undefined }}>
+                        <td style={{ textAlign: 'center' }}>
+                          <input
+                            type="checkbox"
+                            className="contact-checkbox"
+                            checked={isSelected}
+                            onChange={() => toggleSelectContact(c.id)}
+                          />
+                        </td>
+                        <td>
+                          <div className="contact-cell-name">
+                            <div className="contact-avatar">{initial}</div>
+                            <div>
+                              <div className="contact-name-text">
+                                {c.name || <span style={{ color: 'var(--clr-text-3)' }}>Unnamed</span>}
+                              </div>
+                              {c.metadata?.city && (
+                                <div className="contact-city-sub">📍 {c.metadata.city}</div>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+                        <td>
+                          <span style={{ fontFamily: 'monospace', fontSize: 13, fontWeight: 700, color: 'var(--clr-text)' }}>
+                            {formatPhoneDisplay(c.phone)}
+                          </span>
+                        </td>
+                        <td>
+                          {c.contact_groups?.name ? (
+                            <span className="badge badge--blue" style={{ fontSize: 11 }}>
+                              📁 {c.contact_groups.name}
+                            </span>
+                          ) : (
+                            <span style={{ color: 'var(--clr-text-3)', fontSize: 12 }}>—</span>
+                          )}
+                        </td>
+                        <td>
+                          {(c.tags && c.tags.length > 0)
+                            ? c.tags.map(t => (
+                                <span key={t} className="badge badge--gray" style={{ marginRight: 4, fontSize: 10 }}>
+                                  🏷️ {t}
+                                </span>
+                              ))
+                            : <span style={{ color: 'var(--clr-text-3)', fontSize: 12 }}>—</span>
+                          }
+                        </td>
+                        <td>
+                          {c.opted_out
+                            ? <span className="badge badge--red">Opted Out</span>
+                            : <span className="badge badge--green">Active</span>
+                          }
+                        </td>
+                        <td style={{ textAlign: 'right' }}>
+                          <div style={{ display: 'inline-flex', gap: 6 }}>
+                            <button
+                              className="btn btn--secondary btn--sm"
+                              style={{ padding: '3px 8px', fontSize: 11 }}
+                              onClick={() => navigate('/chat')}
+                              title="Send WhatsApp Message"
+                            >
+                              💬 Chat
+                            </button>
+                            <button
+                              className="btn btn--secondary btn--sm"
+                              style={{ padding: '3px 9px', fontSize: 11 }}
+                              onClick={() => startEditContact(c)}
+                              title="Edit Contact Details"
+                            >
+                              ✏️ Edit
+                            </button>
+                            <button
+                              className="btn btn--danger btn--sm"
+                              style={{ padding: '3px 8px', fontSize: 11 }}
+                              onClick={() => handleDeleteContact(c.id)}
+                              title="Delete Contact"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -298,22 +609,75 @@ export default function ContactsPage() {
       {showAddGroup && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowAddGroup(false)}>
           <div className="modal-box">
-            <div className="modal-title">➕ New Group</div>
+            <div className="modal-title">➕ New Contact Group</div>
             <form onSubmit={handleCreateGroup} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               <div className="form-group">
                 <label className="form-label">Group Name *</label>
-                <input className="form-input" placeholder="e.g. School Principals Delhi" value={groupForm.name} onChange={e => setGroupForm(f => ({ ...f, name: e.target.value }))} required />
+                <input
+                  className="form-input"
+                  placeholder="e.g. School Principals Delhi / VIP Customers"
+                  value={groupForm.name}
+                  onChange={e => setGroupForm(f => ({ ...f, name: e.target.value }))}
+                  required
+                />
               </div>
               <div className="form-group">
-                <label className="form-label">Vertical</label>
-                <select className="form-input" value={groupForm.vertical} onChange={e => setGroupForm(f => ({ ...f, vertical: e.target.value }))}>
-                  <option value="">Select vertical...</option>
-                  {VERTICALS.map(v => <option key={v} value={v}>{v.charAt(0).toUpperCase() + v.slice(1)}</option>)}
+                <label className="form-label">Target Industry / Vertical</label>
+                <select
+                  className="form-input"
+                  value={groupForm.vertical}
+                  onChange={e => setGroupForm(f => ({ ...f, vertical: e.target.value }))}
+                >
+                  <option value="">Select industry vertical...</option>
+                  {VERTICALS.map(v => (
+                    <option key={v} value={v}>{v.charAt(0).toUpperCase() + v.slice(1)}</option>
+                  ))}
                 </select>
               </div>
               <div className="modal-footer">
                 <button type="button" className="btn btn--ghost" onClick={() => setShowAddGroup(false)}>Cancel</button>
-                <button type="submit" className="btn btn--primary">Create Group</button>
+                <button type="submit" className="btn btn--primary" disabled={saving}>
+                  {saving ? 'Creating...' : 'Create Group'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Group Modal */}
+      {editingGroup && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setEditingGroup(null)}>
+          <div className="modal-box">
+            <div className="modal-title">✏️ Edit Group Details</div>
+            <form onSubmit={handleUpdateGroup} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div className="form-group">
+                <label className="form-label">Group Name *</label>
+                <input
+                  className="form-input"
+                  value={groupForm.name}
+                  onChange={e => setGroupForm(f => ({ ...f, name: e.target.value }))}
+                  required
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Vertical</label>
+                <select
+                  className="form-input"
+                  value={groupForm.vertical}
+                  onChange={e => setGroupForm(f => ({ ...f, vertical: e.target.value }))}
+                >
+                  <option value="">Select industry vertical...</option>
+                  {VERTICALS.map(v => (
+                    <option key={v} value={v}>{v.charAt(0).toUpperCase() + v.slice(1)}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn--ghost" onClick={() => setEditingGroup(null)}>Cancel</button>
+                <button type="submit" className="btn btn--primary" disabled={saving}>
+                  {saving ? 'Saving...' : 'Save Group'}
+                </button>
               </div>
             </form>
           </div>
@@ -328,7 +692,12 @@ export default function ContactsPage() {
             <form onSubmit={handleCreateContact} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               <div className="form-group">
                 <label className="form-label">Full Name</label>
-                <input className="form-input" placeholder="e.g. Chandan Mallik" value={contactForm.name} onChange={e => setContactForm(f => ({ ...f, name: e.target.value }))} />
+                <input
+                  className="form-input"
+                  placeholder="e.g. Rahul Sharma"
+                  value={contactForm.name}
+                  onChange={e => setContactForm(f => ({ ...f, name: e.target.value }))}
+                />
               </div>
               <div className="form-group">
                 <label className="form-label">Phone Number *</label>
@@ -341,22 +710,35 @@ export default function ContactsPage() {
                 />
                 {contactForm.phone && (
                   <div style={{ fontSize: 11, color: 'var(--clr-primary)', marginTop: 4 }}>
-                    Preview: <strong>{normalizeInputPreview(contactForm.phone)}</strong> (+91 auto-applied for 10-digit numbers)
+                    Preview: <strong>{normalizeInputPreview(contactForm.phone)}</strong> (+91 auto-applied)
                   </div>
                 )}
               </div>
               <div className="form-group">
                 <label className="form-label">Assign to Group</label>
-                <select className="form-input" value={contactForm.group_id || activeGroup || ''} onChange={e => setContactForm(f => ({ ...f, group_id: e.target.value }))}>
+                <select
+                  className="form-input"
+                  value={contactForm.group_id || activeGroup || ''}
+                  onChange={e => setContactForm(f => ({ ...f, group_id: e.target.value }))}
+                >
                   <option value="">No group (All Contacts)</option>
                   {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
                 </select>
               </div>
               <div className="form-group">
+                <label className="form-label">City / Location</label>
+                <input
+                  className="form-input"
+                  placeholder="e.g. Delhi / Mumbai"
+                  value={contactForm.city}
+                  onChange={e => setContactForm(f => ({ ...f, city: e.target.value }))}
+                />
+              </div>
+              <div className="form-group">
                 <label className="form-label">Tags (comma separated)</label>
                 <input
                   className="form-input"
-                  placeholder="e.g. vip, principal, delhi"
+                  placeholder="e.g. vip, lead, customer"
                   value={contactForm.tags}
                   onChange={e => setContactForm(f => ({ ...f, tags: e.target.value }))}
                 />
@@ -382,7 +764,7 @@ export default function ContactsPage() {
                 <label className="form-label">Full Name</label>
                 <input
                   className="form-input"
-                  placeholder="e.g. Chandan Mallik"
+                  placeholder="e.g. Rahul Sharma"
                   value={editForm.name}
                   onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))}
                 />
@@ -391,7 +773,6 @@ export default function ContactsPage() {
                 <label className="form-label">Phone Number *</label>
                 <input
                   className="form-input"
-                  placeholder="e.g. 7982296878 or +91 79822 96878"
                   value={editForm.phone}
                   onChange={e => setEditForm(f => ({ ...f, phone: e.target.value }))}
                   required
@@ -404,16 +785,29 @@ export default function ContactsPage() {
               </div>
               <div className="form-group">
                 <label className="form-label">Group</label>
-                <select className="form-input" value={editForm.group_id} onChange={e => setEditForm(f => ({ ...f, group_id: e.target.value }))}>
+                <select
+                  className="form-input"
+                  value={editForm.group_id}
+                  onChange={e => setEditForm(f => ({ ...f, group_id: e.target.value }))}
+                >
                   <option value="">No group (All Contacts)</option>
                   {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
                 </select>
               </div>
               <div className="form-group">
+                <label className="form-label">City / Location</label>
+                <input
+                  className="form-input"
+                  placeholder="e.g. Delhi / Mumbai"
+                  value={editForm.city}
+                  onChange={e => setEditForm(f => ({ ...f, city: e.target.value }))}
+                />
+              </div>
+              <div className="form-group">
                 <label className="form-label">Tags (comma separated)</label>
                 <input
                   className="form-input"
-                  placeholder="e.g. vip, lead, delhi"
+                  placeholder="e.g. vip, lead, customer"
                   value={editForm.tags}
                   onChange={e => setEditForm(f => ({ ...f, tags: e.target.value }))}
                 />
@@ -425,7 +819,7 @@ export default function ContactsPage() {
                   value={editForm.opted_out ? 'opted_out' : 'active'}
                   onChange={e => setEditForm(f => ({ ...f, opted_out: e.target.value === 'opted_out' }))}
                 >
-                  <option value="active">Active (Can receive messages)</option>
+                  <option value="active">Active (Can receive WhatsApp messages)</option>
                   <option value="opted_out">Opted Out (Do not message)</option>
                 </select>
               </div>
@@ -433,6 +827,34 @@ export default function ContactsPage() {
                 <button type="button" className="btn btn--ghost" onClick={() => setEditingContact(null)}>Cancel</button>
                 <button type="submit" className="btn btn--primary" disabled={saving}>
                   {saving ? 'Updating...' : 'Save Changes'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Move Group Modal */}
+      {showBulkGroupModal && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowBulkGroupModal(false)}>
+          <div className="modal-box">
+            <div className="modal-title">📁 Move {selectedIds.length} Contacts to Group</div>
+            <form onSubmit={handleBulkMoveGroup} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div className="form-group">
+                <label className="form-label">Select Destination Group</label>
+                <select
+                  className="form-input"
+                  value={bulkTargetGroup}
+                  onChange={e => setBulkTargetGroup(e.target.value)}
+                >
+                  <option value="">No Group (Unassign from current groups)</option>
+                  {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+                </select>
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn--ghost" onClick={() => setShowBulkGroupModal(false)}>Cancel</button>
+                <button type="submit" className="btn btn--primary">
+                  Move Contacts
                 </button>
               </div>
             </form>

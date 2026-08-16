@@ -39,14 +39,23 @@ async function deleteGroup(req, res) {
 
 async function listContacts(req, res) {
   try {
-    const { group_id, search, limit = 100, offset = 0 } = req.query;
+    const { group_id, search, status, tag, limit = 100, offset = 0 } = req.query;
     const result = await contactRepo.getContacts(req.orgId, {
       group_id,
       search,
+      status,
+      tag,
       limit:  parseInt(limit),
       offset: parseInt(offset),
     });
     res.json(result);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+}
+
+async function listTags(req, res) {
+  try {
+    const tags = await contactRepo.getAllTags(req.orgId);
+    res.json({ tags });
   } catch (err) { res.status(500).json({ error: err.message }); }
 }
 
@@ -107,6 +116,41 @@ async function deleteContact(req, res) {
   } catch (err) { res.status(500).json({ error: err.message }); }
 }
 
+// ── Bulk Contact Actions ─────────────────────────────────────
+
+async function bulkDeleteContacts(req, res) {
+  try {
+    const { ids } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ error: 'ids array required' });
+    }
+    const result = await contactRepo.bulkDeleteContacts(req.orgId, ids);
+    res.json({ message: `Deleted ${result.count} contacts`, count: result.count });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+}
+
+async function bulkUpdateGroup(req, res) {
+  try {
+    const { ids, group_id } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ error: 'ids array required' });
+    }
+    const result = await contactRepo.bulkUpdateGroup(req.orgId, ids, group_id);
+    res.json({ message: `Moved ${result.count} contacts to group`, count: result.count });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+}
+
+async function bulkUpdateStatus(req, res) {
+  try {
+    const { ids, opted_out } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ error: 'ids array required' });
+    }
+    const result = await contactRepo.bulkUpdateStatus(req.orgId, ids, opted_out);
+    res.json({ message: `Updated status for ${result.count} contacts`, count: result.count });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+}
+
 // ── CSV Import ───────────────────────────────────────────────
 
 async function importCSV(req, res) {
@@ -158,5 +202,10 @@ async function importCSV(req, res) {
   }
 }
 
-module.exports = { listGroups, createGroup, updateGroup, deleteGroup, listContacts, createContact, updateContact, deleteContact, importCSV };
+module.exports = {
+  listGroups, createGroup, updateGroup, deleteGroup,
+  listContacts, listTags, createContact, updateContact, deleteContact,
+  bulkDeleteContacts, bulkUpdateGroup, bulkUpdateStatus, importCSV,
+};
+
 

@@ -11,6 +11,14 @@ router.post(  '/groups',     authenticate, requireRole('owner','admin','agent'),
 router.patch( '/groups/:id', authenticate, requireRole('owner','admin'), ctrl.updateGroup);
 router.delete('/groups/:id', authenticate, requireRole('owner','admin'), ctrl.deleteGroup);
 
+// Tags
+router.get('/tags', authenticate, ctrl.listTags);
+
+// Bulk operations
+router.post('/bulk-delete', authenticate, requireRole('owner','admin'), ctrl.bulkDeleteContacts);
+router.post('/bulk-group',  authenticate, requireRole('owner','admin','agent'), ctrl.bulkUpdateGroup);
+router.post('/bulk-status', authenticate, requireRole('owner','admin','agent'), ctrl.bulkUpdateStatus);
+
 // Contacts
 router.get(   '/',            authenticate, ctrl.listContacts);
 router.post(  '/',            authenticate, ctrl.createContact);
