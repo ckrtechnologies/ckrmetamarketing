@@ -9,6 +9,7 @@ const NAV_ITEMS = [
   { path: '/campaigns',  icon: '📣', label: 'Campaigns' },
   { path: '/contacts',   icon: '👥', label: 'Contacts' },
   { path: '/chat',       icon: '💬', label: 'Live Chat', badge: true },
+  { path: '/ads',        icon: '🎯', label: 'Ads Manager' },
   { path: '/reports',    icon: '📈', label: 'Reports' },
   { path: '/waba',       icon: '📱', label: 'WA Numbers' },
   { path: '/settings',   icon: '⚙️',  label: 'Settings' },

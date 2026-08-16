@@ -10,6 +10,7 @@ import ContactsPage  from './components/Contacts/ContactsPage.jsx';
 import CampaignList  from './components/Campaign/CampaignList.jsx';
 import ChatPage      from './components/Chat/ChatPage.jsx';
 import ReportsPage   from './components/Reports/ReportsPage.jsx';
+import AdsPage       from './components/Ads/AdsPage.jsx';
 
 const Placeholder = ({ name }) => (
   <div className="card fade-in" style={{ textAlign: 'center', padding: '60px 20px' }}>
@@ -81,6 +82,11 @@ export default function App() {
         <Route path="/reports" element={
           <ProtectedRoute user={user} org={org} title="Analytics">
             <ReportsPage />
+          </ProtectedRoute>
+        } />
+        <Route path="/ads" element={
+          <ProtectedRoute user={user} org={org} title="Ads Manager">
+            <AdsPage />
           </ProtectedRoute>
         } />
         <Route path="/waba" element={

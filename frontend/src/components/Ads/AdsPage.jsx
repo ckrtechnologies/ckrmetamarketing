@@ -1,0 +1,973 @@
+import React, { useState, useEffect, useRef } from 'react';
+import {
+  listAdAccounts, connectAdAccount, disconnectAdAccount, fetchMetaAccounts,
+  listCampaigns, createCampaign, updateCampaign, deleteCampaign,
+  getAccountInsights, getCampaignInsights,
+  listAudiences, searchInterests, listPages,
+  publishCampaign,
+} from '../../api/ads.js';
+import {
+  AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid,
+  Tooltip, ResponsiveContainer, Legend,
+} from 'recharts';
+import './Ads.css';
+
+// ── Constants ─────────────────────────────────────────────────────
+
+const OBJECTIVES = [
+  { key: 'OUTCOME_ENGAGEMENT', icon: '💬', name: 'WhatsApp Conversations', desc: 'Users click your ad and open WhatsApp chat with you' },
+  { key: 'OUTCOME_TRAFFIC',    icon: '🌐', name: 'Website Traffic',        desc: 'Send people to your website or landing page' },
+  { key: 'OUTCOME_LEADS',      icon: '📋', name: 'Lead Generation',        desc: 'Collect contact info via Meta Lead Forms' },
+  { key: 'OUTCOME_SALES',      icon: '🛍️', name: 'Sales & Conversions',    desc: 'Drive purchases on your website or app' },
+];
+
+const DATE_PRESETS = [
+  { value: 'last_7d',  label: 'Last 7 Days' },
+  { value: 'last_14d', label: 'Last 14 Days' },
+  { value: 'last_30d', label: 'Last 30 Days' },
+  { value: 'last_90d', label: 'Last 90 Days' },
+];
+
+const COUNTRIES = [
+  { value: 'IN', label: '🇮🇳 India' },
+  { value: 'US', label: '🇺🇸 United States' },
+  { value: 'GB', label: '🇬🇧 United Kingdom' },
+  { value: 'AE', label: '🇦🇪 UAE' },
+  { value: 'SG', label: '🇸🇬 Singapore' },
+];
+
+function formatCurrency(n, currency = 'INR') {
+  const sym = currency === 'INR' ? '₹' : '$';
+  return `${sym}${parseFloat(n || 0).toFixed(2)}`;
+}
+
+function formatBudgetFromPaise(paise, currency = 'INR') {
+  if (!paise) return '—';
+  const sym = currency === 'INR' ? '₹' : '$';
+  return `${sym}${(paise / 100).toFixed(0)}`;
+}
+
+function formatNum(n) {
+  const num = parseInt(n || 0);
+  if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
+  if (num >= 1000)    return `${(num / 1000).toFixed(1)}K`;
+  return String(num);
+}
+
+function StatusPill({ status }) {
+  const s = (status || '').toUpperCase();
+  return (
+    <span className={`campaign-status-pill campaign-status-pill--${s.toLowerCase()}`}>
+      {s === 'ACTIVE' ? '🟢' : s === 'PAUSED' ? '⏸' : s === 'DELETED' ? '🗑️' : '📦'} {s}
+    </span>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  MAIN ADS PAGE
+// ═══════════════════════════════════════════════════════════════
+
+export default function AdsPage() {
+  const [tab, setTab] = useState('overview');
+
+  // Account state
+  const [accounts,       setAccounts]       = useState([]);
+  const [activeAccount,  setActiveAccount]  = useState(null);
+  const [loadingAccounts, setLoadingAccounts] = useState(true);
+
+  // Error / success
+  const [error,   setError]   = useState('');
+  const [success, setSuccess] = useState('');
+
+  useEffect(() => { loadAccounts(); }, []);
+
+  async function loadAccounts() {
+    setLoadingAccounts(true);
+    try {
+      const data = await listAdAccounts();
+      const accs = data.accounts || [];
+      setAccounts(accs);
+      setActiveAccount(accs.find(a => a.is_active) || accs[0] || null);
+    } catch (e) { setError(e.message); }
+    finally { setLoadingAccounts(false); }
+  }
+
+  const tabs = [
+    { key: 'overview',   label: '📊 Overview' },
+    { key: 'campaigns',  label: '📣 Campaigns' },
+    { key: 'create',     label: '✨ Create Ad' },
+    { key: 'audiences',  label: '👥 Audiences' },
+    { key: 'accounts',   label: '🔗 Ad Accounts' },
+  ];
+
+  return (
+    <div className="ads-page fade-in">
+      <div className="page-header" style={{ marginBottom: 20 }}>
+        <div>
+          <h1>📣 Ads Manager</h1>
+          <p>Create, publish, and track your Meta ad campaigns</p>
+        </div>
+        {activeAccount && (
+          <div className="ads-account-chip">
+            ✅ {activeAccount.name} ({activeAccount.act_id}) — {activeAccount.currency}
+          </div>
+        )}
+      </div>
+
+      {error && <div className="alert alert--error" style={{ marginBottom: 16 }}>{error}</div>}
+      {success && <div className="alert alert--success" style={{ marginBottom: 16 }}>{success}</div>}
+
+      {/* No Account Banner */}
+      {!loadingAccounts && !activeAccount && (
+        <div className="ads-connect-banner">
+          <div style={{ fontSize: 40, marginBottom: 12 }}>📣</div>
+          <h3>Connect Your Meta Ad Account</h3>
+          <p>Link your Facebook Business Ad Account to start creating and managing campaigns directly from this dashboard.</p>
+          <button className="btn btn--primary" onClick={() => setTab('accounts')}>🔗 Connect Ad Account</button>
+        </div>
+      )}
+
+      {/* Tab Nav */}
+      <div className="ads-tabs">
+        {tabs.map(t => (
+          <button
+            key={t.key}
+            className={`ads-tab${tab === t.key ? ' ads-tab--active' : ''}`}
+            onClick={() => { setTab(t.key); setError(''); setSuccess(''); }}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Tab Content */}
+      {tab === 'overview'  && <OverviewTab account={activeAccount} />}
+      {tab === 'campaigns' && <CampaignsTab account={activeAccount} onRefresh={loadAccounts} />}
+      {tab === 'create'    && <CreateAdTab  account={activeAccount} accounts={accounts} onSuccess={(msg) => { setSuccess(msg); setTab('campaigns'); }} />}
+      {tab === 'audiences' && <AudiencesTab account={activeAccount} />}
+      {tab === 'accounts'  && <AccountsTab accounts={accounts} onRefresh={loadAccounts} />}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  TAB: OVERVIEW (Insights Dashboard)
+// ═══════════════════════════════════════════════════════════════
+
+function OverviewTab({ account }) {
+  const [insights,    setInsights]    = useState([]);
+  const [totals,      setTotals]      = useState({});
+  const [datePreset,  setDatePreset]  = useState('last_30d');
+  const [loading,     setLoading]     = useState(false);
+  const [error,       setError]       = useState('');
+
+  useEffect(() => { if (account) loadInsights(); }, [account, datePreset]);
+
+  async function loadInsights() {
+    setLoading(true); setError('');
+    try {
+      const data = await getAccountInsights({ date_preset: datePreset });
+      setInsights(data.insights || []);
+      setTotals(data.totals || {});
+    } catch (e) {
+      setError(e.message);
+    } finally { setLoading(false); }
+  }
+
+  if (!account) return (
+    <div className="card" style={{ textAlign: 'center', padding: 48 }}>
+      <div style={{ fontSize: 40, marginBottom: 12 }}>🔗</div>
+      <p style={{ color: 'var(--clr-text-2)' }}>Connect an Ad Account to see performance data</p>
+    </div>
+  );
+
+  const kpis = [
+    { label: 'Total Spend',   value: formatCurrency(totals.spend, account.currency), sub: 'Ad budget consumed', gradient: 'linear-gradient(135deg,rgba(255,165,0,.1),transparent)' },
+    { label: 'Reach',         value: formatNum(totals.reach),                         sub: 'Unique users reached', gradient: 'linear-gradient(135deg,rgba(24,119,242,.1),transparent)' },
+    { label: 'Impressions',   value: formatNum(totals.impressions),                   sub: 'Total ad views', gradient: 'linear-gradient(135deg,rgba(37,211,102,.08),transparent)' },
+    { label: 'Clicks',        value: formatNum(totals.clicks),                        sub: 'Link clicks', gradient: 'linear-gradient(135deg,rgba(120,86,255,.1),transparent)' },
+    { label: 'CTR',           value: `${totals.ctr || '0.00'}%`,                      sub: 'Click-through rate', gradient: 'linear-gradient(135deg,rgba(255,100,100,.1),transparent)' },
+    { label: 'CPC',           value: formatCurrency(totals.cpc, account.currency),    sub: 'Cost per click', gradient: 'linear-gradient(135deg,rgba(0,200,200,.08),transparent)' },
+    { label: 'CPM',           value: formatCurrency(totals.cpm, account.currency),    sub: 'Cost per 1000 views', gradient: 'linear-gradient(135deg,rgba(255,200,0,.08),transparent)' },
+  ];
+
+  return (
+    <div>
+      {/* Date Filter */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
+        {DATE_PRESETS.map(d => (
+          <button
+            key={d.value}
+            className={`chat-filter-btn${datePreset === d.value ? ' chat-filter-btn--active' : ''}`}
+            onClick={() => setDatePreset(d.value)}
+          >
+            {d.label}
+          </button>
+        ))}
+        <button className="btn btn--ghost btn--sm" onClick={loadInsights} disabled={loading}>
+          {loading ? '⏳' : '↻'} Refresh
+        </button>
+      </div>
+
+      {error && <div className="alert alert--error" style={{ marginBottom: 16 }}>{error}</div>}
+
+      {/* KPI Cards */}
+      <div className="ads-kpi-row">
+        {kpis.map(k => (
+          <div key={k.label} className="ads-kpi-card" style={{ '--ads-kpi-gradient': k.gradient }}>
+            <div className="ads-kpi-label">{k.label}</div>
+            <div className="ads-kpi-value">{k.value}</div>
+            <div className="ads-kpi-sub">{k.sub}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Charts */}
+      {insights.length > 0 ? (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+          <div className="ads-chart-wrap">
+            <div className="ads-chart-title">💰 Spend Over Time</div>
+            <ResponsiveContainer width="100%" height={200}>
+              <AreaChart data={insights}>
+                <defs>
+                  <linearGradient id="spendGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#ff9500" stopOpacity={0.3}/>
+                    <stop offset="95%" stopColor="#ff9500" stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,.06)" />
+                <XAxis dataKey="date_start" tick={{ fontSize: 10, fill: 'var(--clr-text-3)' }} tickFormatter={d => d.slice(5)} />
+                <YAxis tick={{ fontSize: 10, fill: 'var(--clr-text-3)' }} />
+                <Tooltip contentStyle={{ background: 'var(--clr-surface)', border: '1px solid var(--clr-border)', borderRadius: 8, fontSize: 12 }} />
+                <Area type="monotone" dataKey="spend" stroke="#ff9500" fill="url(#spendGrad)" name="Spend" />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+
+          <div className="ads-chart-wrap">
+            <div className="ads-chart-title">👁 Impressions & Clicks</div>
+            <ResponsiveContainer width="100%" height={200}>
+              <BarChart data={insights}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,.06)" />
+                <XAxis dataKey="date_start" tick={{ fontSize: 10, fill: 'var(--clr-text-3)' }} tickFormatter={d => d.slice(5)} />
+                <YAxis tick={{ fontSize: 10, fill: 'var(--clr-text-3)' }} />
+                <Tooltip contentStyle={{ background: 'var(--clr-surface)', border: '1px solid var(--clr-border)', borderRadius: 8, fontSize: 12 }} />
+                <Legend wrapperStyle={{ fontSize: 11 }} />
+                <Bar dataKey="impressions" fill="rgba(24,119,242,.7)" name="Impressions" radius={[3,3,0,0]} />
+                <Bar dataKey="clicks"      fill="rgba(37,211,102,.8)" name="Clicks"      radius={[3,3,0,0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      ) : (
+        <div className="card" style={{ textAlign: 'center', padding: 40 }}>
+          <div style={{ fontSize: 36, marginBottom: 8 }}>📊</div>
+          <p style={{ color: 'var(--clr-text-2)' }}>No insights data yet. Create and run a campaign to see performance here.</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  TAB: CAMPAIGNS LIST
+// ═══════════════════════════════════════════════════════════════
+
+function CampaignsTab({ account, onRefresh }) {
+  const [campaigns, setCampaigns] = useState([]);
+  const [loading,   setLoading]   = useState(false);
+  const [error,     setError]     = useState('');
+  const [expandedId, setExpandedId] = useState(null);
+  const [insights,  setInsights]  = useState({});
+
+  useEffect(() => { if (account) load(); }, [account]);
+
+  async function load() {
+    setLoading(true); setError('');
+    try {
+      const data = await listCampaigns();
+      setCampaigns(data.campaigns || []);
+    } catch (e) { setError(e.message); }
+    finally { setLoading(false); }
+  }
+
+  async function toggleStatus(c) {
+    const newStatus = c.status === 'ACTIVE' ? 'PAUSED' : 'ACTIVE';
+    try {
+      await updateCampaign(c.id, { meta_campaign_id: c.id, status: newStatus });
+      setCampaigns(prev => prev.map(x => x.id === c.id ? { ...x, status: newStatus } : x));
+    } catch (e) { alert(e.message); }
+  }
+
+  async function handleDelete(c) {
+    if (!confirm(`Delete campaign "${c.name}"? This cannot be undone.`)) return;
+    try {
+      await deleteCampaign(c.id);
+      setCampaigns(prev => prev.filter(x => x.id !== c.id));
+    } catch (e) { alert(e.message); }
+  }
+
+  async function loadInsights(c) {
+    if (expandedId === c.id) { setExpandedId(null); return; }
+    setExpandedId(c.id);
+    try {
+      const data = await getCampaignInsights(c.id, { date_preset: 'last_30d' });
+      setInsights(prev => ({ ...prev, [c.id]: data }));
+    } catch (e) {}
+  }
+
+  if (!account) return <div className="card" style={{ textAlign: 'center', padding: 48 }}><p style={{ color: 'var(--clr-text-2)' }}>Connect an Ad Account first</p></div>;
+
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+        <div style={{ color: 'var(--clr-text-2)', fontSize: 13 }}>{campaigns.length} campaigns in {account.name}</div>
+        <button className="btn btn--ghost btn--sm" onClick={load} disabled={loading}>↻ Refresh</button>
+      </div>
+
+      {error && <div className="alert alert--error">{error}</div>}
+
+      {loading ? (
+        <div className="loading-center"><div className="spinner" /></div>
+      ) : campaigns.length === 0 ? (
+        <div className="card" style={{ textAlign: 'center', padding: 48 }}>
+          <div style={{ fontSize: 40, marginBottom: 12 }}>📣</div>
+          <h3>No campaigns yet</h3>
+          <p style={{ color: 'var(--clr-text-2)', marginBottom: 16 }}>Create your first Click-to-WhatsApp campaign</p>
+        </div>
+      ) : (
+        <div className="table-wrap">
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Campaign</th>
+                <th>Objective</th>
+                <th>Daily Budget</th>
+                <th>Status</th>
+                <th style={{ textAlign: 'right' }}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {campaigns.map(c => (
+                <React.Fragment key={c.id}>
+                  <tr>
+                    <td>
+                      <div style={{ fontWeight: 600, fontSize: 13 }}>{c.name}</div>
+                      <div style={{ fontSize: 11, color: 'var(--clr-text-3)', marginTop: 2 }}>ID: {c.id}</div>
+                    </td>
+                    <td>
+                      <span style={{ fontSize: 12, color: 'var(--clr-text-2)' }}>
+                        {OBJECTIVES.find(o => o.key === c.objective)?.icon || '📢'}&nbsp;
+                        {c.objective?.replace('OUTCOME_', '') || '—'}
+                      </span>
+                    </td>
+                    <td>
+                      <span style={{ fontFamily: 'monospace', fontWeight: 700 }}>
+                        {formatBudgetFromPaise(c.daily_budget, account.currency)}/day
+                      </span>
+                    </td>
+                    <td><StatusPill status={c.status} /></td>
+                    <td style={{ textAlign: 'right' }}>
+                      <div style={{ display: 'inline-flex', gap: 6 }}>
+                        <button className="btn btn--secondary btn--sm" style={{ fontSize: 11, padding: '3px 8px' }} onClick={() => loadInsights(c)}>
+                          {expandedId === c.id ? '▲ Insights' : '📊 Insights'}
+                        </button>
+                        <button
+                          className="btn btn--secondary btn--sm"
+                          style={{ fontSize: 11, padding: '3px 8px' }}
+                          onClick={() => toggleStatus(c)}
+                          disabled={['DELETED', 'ARCHIVED'].includes(c.status)}
+                        >
+                          {c.status === 'ACTIVE' ? '⏸ Pause' : '▶ Resume'}
+                        </button>
+                        <button className="btn btn--danger btn--sm" style={{ fontSize: 11, padding: '3px 8px' }} onClick={() => handleDelete(c)}>
+                          ✕
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+
+                  {/* Inline Insights Row */}
+                  {expandedId === c.id && insights[c.id] && (
+                    <tr>
+                      <td colSpan={5} style={{ background: 'rgba(37,211,102,.04)', padding: '16px 20px' }}>
+                        {insights[c.id].totals ? (
+                          <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
+                            {[
+                              ['Impressions', formatNum(insights[c.id].totals?.impressions)],
+                              ['Clicks', formatNum(insights[c.id].totals?.clicks)],
+                              ['Spend', formatCurrency(insights[c.id].totals?.spend, account.currency)],
+                              ['Reach', formatNum(insights[c.id].totals?.reach)],
+                              ['CTR', `${(parseFloat(insights[c.id].totals?.ctr || 0) * 100).toFixed(2)}%`],
+                              ['CPC', formatCurrency(insights[c.id].totals?.cpc, account.currency)],
+                            ].map(([label, val]) => (
+                              <div key={label}>
+                                <div style={{ fontSize: 10, color: 'var(--clr-text-3)', fontWeight: 700, textTransform: 'uppercase' }}>{label}</div>
+                                <div style={{ fontSize: 18, fontWeight: 900, color: 'var(--clr-text)', fontFamily: 'var(--font-display)' }}>{val}</div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <span style={{ color: 'var(--clr-text-3)', fontSize: 12 }}>No insights data for this campaign yet.</span>
+                        )}
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  TAB: CREATE AD (Wizard)
+// ═══════════════════════════════════════════════════════════════
+
+function CreateAdTab({ account, accounts, onSuccess }) {
+  const [step,      setStep]      = useState(1);
+  const [pages,     setPages]     = useState([]);
+  const [saving,    setSaving]    = useState(false);
+  const [error,     setError]     = useState('');
+
+  // Form state
+  const [form, setForm] = useState({
+    account_id:        '',
+    campaign_name:     '',
+    objective:         'OUTCOME_ENGAGEMENT',
+    status:            'PAUSED',
+    daily_budget:      '',
+    // Targeting
+    countries:         ['IN'],
+    age_min:           18,
+    age_max:           65,
+    genders:           [0],
+    // Creative
+    page_id:           '',
+    headline:          '',
+    body:              '',
+    description:       '',
+    call_to_action_type: 'WHATSAPP_MESSAGE',
+  });
+
+  useEffect(() => {
+    if (account) loadPages();
+  }, [account]);
+
+  async function loadPages() {
+    try {
+      const data = await listPages();
+      setPages(data.pages || []);
+      if (data.pages?.length) setForm(f => ({ ...f, page_id: data.pages[0].id }));
+    } catch (e) {}
+  }
+
+  function setField(key, val) {
+    setForm(f => ({ ...f, [key]: val }));
+  }
+
+  async function handlePublish(e) {
+    e.preventDefault();
+    if (!account && !form.account_id) { setError('Please connect an Ad Account first'); return; }
+    if (!form.campaign_name.trim())   { setError('Campaign name is required'); return; }
+    if (!form.page_id)                { setError('Please select a Facebook Page'); return; }
+    if (!form.headline.trim())        { setError('Ad headline is required'); return; }
+    if (!form.body.trim())            { setError('Ad body text is required'); return; }
+
+    setSaving(true); setError('');
+    try {
+      const payload = {
+        account_id:    form.account_id || undefined,
+        campaign_name: form.campaign_name.trim(),
+        objective:     form.objective,
+        status:        form.status,
+        daily_budget:  form.daily_budget || undefined,
+        adset_name:    `${form.campaign_name} — Ad Set`,
+        targeting: {
+          geo_locations: { countries: form.countries },
+          age_min: parseInt(form.age_min),
+          age_max: parseInt(form.age_max),
+          genders: form.genders,
+        },
+        page_id:             form.page_id,
+        headline:            form.headline.trim(),
+        body:                form.body.trim(),
+        description:         form.description.trim(),
+        call_to_action_type: form.call_to_action_type,
+      };
+
+      const result = await publishCampaign(payload);
+      onSuccess(`✅ Campaign "${form.campaign_name}" published! Campaign ID: ${result.campaign_id}`);
+    } catch (e) { setError(e.message); }
+    finally { setSaving(false); }
+  }
+
+  const selectedObjective = OBJECTIVES.find(o => o.key === form.objective);
+
+  if (!account) return (
+    <div className="card" style={{ textAlign: 'center', padding: 48 }}>
+      <div style={{ fontSize: 40, marginBottom: 12 }}>🔗</div>
+      <p style={{ color: 'var(--clr-text-2)', marginBottom: 16 }}>Connect an Ad Account first to create campaigns</p>
+    </div>
+  );
+
+  return (
+    <div style={{ maxWidth: 800, margin: '0 auto' }}>
+
+      {/* Wizard Steps */}
+      <div className="wizard-steps">
+        {['Objective', 'Targeting', 'Budget', 'Creative', 'Review'].map((label, i) => {
+          const num = i + 1;
+          const cls = step > num ? 'done' : step === num ? 'active' : '';
+          return (
+            <div
+              key={label}
+              className={`wizard-step wizard-step--${cls}`}
+              onClick={() => num < step && setStep(num)}
+              style={{ cursor: num < step ? 'pointer' : 'default' }}
+            >
+              <span className="wizard-step-num">{step > num ? '✓' : num}</span>
+              {label}
+            </div>
+          );
+        })}
+      </div>
+
+      {error && <div className="alert alert--error" style={{ marginBottom: 16 }}>{error}</div>}
+
+      {/* ─── Step 1: Objective ─── */}
+      {step === 1 && (
+        <div className="card">
+          <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 6 }}>1. Choose Campaign Objective</div>
+          <div style={{ fontSize: 13, color: 'var(--clr-text-2)', marginBottom: 20 }}>What do you want people to do when they see your ad?</div>
+
+          <div className="form-group">
+            <label className="form-label">Campaign Name *</label>
+            <input className="form-input" placeholder="e.g. Healthy Manushya — Summer Offer" value={form.campaign_name} onChange={e => setField('campaign_name', e.target.value)} required />
+          </div>
+
+          <div className="objective-grid">
+            {OBJECTIVES.map(o => (
+              <div
+                key={o.key}
+                className={`objective-card${form.objective === o.key ? ' objective-card--selected' : ''}`}
+                onClick={() => setField('objective', o.key)}
+              >
+                <div className="objective-card__icon">{o.icon}</div>
+                <div className="objective-card__name">{o.name}</div>
+                <div className="objective-card__desc">{o.desc}</div>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 24 }}>
+            <button className="btn btn--primary" onClick={() => { if (!form.campaign_name.trim()) { setError('Campaign name is required'); return; } setError(''); setStep(2); }}>
+              Next: Targeting →
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Step 2: Targeting ─── */}
+      {step === 2 && (
+        <div className="card">
+          <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 6 }}>2. Define Your Audience</div>
+          <div style={{ fontSize: 13, color: 'var(--clr-text-2)', marginBottom: 20 }}>Choose who will see your ad</div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+            <div className="form-group">
+              <label className="form-label">Country / Region</label>
+              <select className="form-input" value={form.countries[0]} onChange={e => setField('countries', [e.target.value])}>
+                {COUNTRIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+              </select>
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Gender</label>
+              <select className="form-input" value={form.genders[0]} onChange={e => setField('genders', [parseInt(e.target.value)])}>
+                <option value={0}>All Genders</option>
+                <option value={1}>Male Only</option>
+                <option value={2}>Female Only</option>
+              </select>
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Min Age</label>
+              <input className="form-input" type="number" min="18" max="65" value={form.age_min} onChange={e => setField('age_min', e.target.value)} />
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Max Age</label>
+              <input className="form-input" type="number" min="18" max="65" value={form.age_max} onChange={e => setField('age_max', e.target.value)} />
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 24 }}>
+            <button className="btn btn--ghost" onClick={() => setStep(1)}>← Back</button>
+            <button className="btn btn--primary" onClick={() => { setError(''); setStep(3); }}>Next: Budget →</button>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Step 3: Budget ─── */}
+      {step === 3 && (
+        <div className="card">
+          <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 6 }}>3. Set Budget & Schedule</div>
+          <div style={{ fontSize: 13, color: 'var(--clr-text-2)', marginBottom: 20 }}>Set how much to spend per day</div>
+
+          <div className="form-group">
+            <label className="form-label">Daily Budget ({account?.currency || 'INR'}) *</label>
+            <input
+              className="form-input"
+              type="number"
+              min="50"
+              step="10"
+              placeholder="e.g. 500"
+              value={form.daily_budget}
+              onChange={e => setField('daily_budget', e.target.value)}
+            />
+            <div style={{ fontSize: 11, color: 'var(--clr-text-3)', marginTop: 4 }}>Minimum: ₹50/day</div>
+          </div>
+
+          <div className="form-group">
+            <label className="form-label">Launch Status</label>
+            <select className="form-input" value={form.status} onChange={e => setField('status', e.target.value)}>
+              <option value="PAUSED">Save as Draft (Paused) — publish manually later</option>
+              <option value="ACTIVE">Go Live Immediately 🚀</option>
+            </select>
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 24 }}>
+            <button className="btn btn--ghost" onClick={() => setStep(2)}>← Back</button>
+            <button className="btn btn--primary" onClick={() => { if (!form.daily_budget) { setError('Daily budget is required'); return; } setError(''); setStep(4); }}>Next: Creative →</button>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Step 4: Creative ─── */}
+      {step === 4 && (
+        <div className="card">
+          <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 6 }}>4. Create Your Ad</div>
+          <div style={{ fontSize: 13, color: 'var(--clr-text-2)', marginBottom: 20 }}>Write the copy for your Facebook / Instagram ad</div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 24 }}>
+            {/* Left: Form */}
+            <div>
+              <div className="form-group">
+                <label className="form-label">Facebook Page *</label>
+                {pages.length > 0 ? (
+                  <select className="form-input" value={form.page_id} onChange={e => setField('page_id', e.target.value)}>
+                    {pages.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  </select>
+                ) : (
+                  <div style={{ fontSize: 12, color: 'var(--clr-text-3)', background: 'var(--clr-surface-2)', padding: '10px 12px', borderRadius: 8 }}>
+                    ⚠️ No Facebook Pages found. Make sure your access token has `pages_read_engagement` permission.
+                  </div>
+                )}
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Ad Headline *</label>
+                <input className="form-input" placeholder="e.g. Get 20% Off Today!" value={form.headline} onChange={e => setField('headline', e.target.value)} maxLength={40} />
+                <div style={{ fontSize: 10, color: 'var(--clr-text-3)', marginTop: 2 }}>{form.headline.length}/40 characters</div>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Primary Ad Text *</label>
+                <textarea className="form-input" rows={3} placeholder="e.g. Discover our latest wellness products. Chat with us on WhatsApp to know more!" value={form.body} onChange={e => setField('body', e.target.value)} maxLength={125} />
+                <div style={{ fontSize: 10, color: 'var(--clr-text-3)', marginTop: 2 }}>{form.body.length}/125 characters</div>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Description (optional)</label>
+                <input className="form-input" placeholder="e.g. Limited time offer. Click to chat." value={form.description} onChange={e => setField('description', e.target.value)} maxLength={30} />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Call to Action</label>
+                <select className="form-input" value={form.call_to_action_type} onChange={e => setField('call_to_action_type', e.target.value)}>
+                  <option value="WHATSAPP_MESSAGE">💬 Send WhatsApp Message</option>
+                  <option value="LEARN_MORE">Learn More</option>
+                  <option value="SIGN_UP">Sign Up</option>
+                  <option value="SHOP_NOW">Shop Now</option>
+                  <option value="GET_QUOTE">Get Quote</option>
+                  <option value="CONTACT_US">Contact Us</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Right: Live Preview */}
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--clr-text-2)', marginBottom: 10 }}>📱 Live Preview</div>
+              <div className="wa-ad-preview">
+                <div className="wa-ad-preview__sponsor">Sponsored · {pages.find(p => p.id === form.page_id)?.name || 'Your Page'}</div>
+                <div className="wa-ad-preview__bubble">
+                  <div className="wa-ad-preview__image">🖼️</div>
+                  <div className="wa-ad-preview__content">
+                    <div className="wa-ad-preview__headline">{form.headline || 'Your Headline Here'}</div>
+                    <div className="wa-ad-preview__body">{form.body || 'Your ad copy will appear here. Keep it concise and compelling!'}</div>
+                    <div className="wa-ad-preview__cta">
+                      {form.call_to_action_type === 'WHATSAPP_MESSAGE' ? '💬 Send WhatsApp Message' :
+                       form.call_to_action_type === 'LEARN_MORE' ? 'Learn More' :
+                       form.call_to_action_type === 'SHOP_NOW' ? '🛍 Shop Now' :
+                       form.call_to_action_type === 'GET_QUOTE' ? 'Get Quote' : 'Contact Us'}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--clr-text-3)', marginTop: 10, lineHeight: 1.4 }}>
+                💡 <strong>Tip:</strong> Users who click this ad will open your WhatsApp ({account?.name || 'connected number'}) directly.
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 24 }}>
+            <button className="btn btn--ghost" onClick={() => setStep(3)}>← Back</button>
+            <button className="btn btn--primary" onClick={() => { if (!form.headline.trim() || !form.body.trim()) { setError('Headline and ad text are required'); return; } setError(''); setStep(5); }}>Review →</button>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Step 5: Review & Publish ─── */}
+      {step === 5 && (
+        <div className="card">
+          <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 20 }}>5. Review & Publish</div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 24 }}>
+            {[
+              ['Campaign Name',  form.campaign_name],
+              ['Objective',      `${selectedObjective?.icon} ${selectedObjective?.name}`],
+              ['Target Country', COUNTRIES.find(c => c.value === form.countries[0])?.label],
+              ['Age Range',      `${form.age_min} – ${form.age_max}`],
+              ['Daily Budget',   `${account?.currency === 'INR' ? '₹' : '$'}${form.daily_budget}`],
+              ['Launch Status',  form.status],
+              ['Facebook Page',  pages.find(p => p.id === form.page_id)?.name || '—'],
+              ['Headline',       form.headline],
+              ['Ad Text',        form.body],
+              ['CTA',            form.call_to_action_type],
+            ].map(([label, val]) => (
+              <div key={label} style={{ display: 'flex', gap: 12, padding: '10px 14px', background: 'var(--clr-surface-2)', borderRadius: 8 }}>
+                <div style={{ width: 140, fontSize: 12, fontWeight: 700, color: 'var(--clr-text-2)', flexShrink: 0 }}>{label}</div>
+                <div style={{ fontSize: 13, color: 'var(--clr-text)' }}>{val}</div>
+              </div>
+            ))}
+          </div>
+
+          {form.status === 'ACTIVE' && (
+            <div style={{ background: 'rgba(255,165,0,.12)', border: '1px solid rgba(255,165,0,.3)', borderRadius: 8, padding: '12px 16px', marginBottom: 16, fontSize: 13, color: '#ffaa00' }}>
+              ⚠️ Setting status to <strong>ACTIVE</strong> will immediately start running your ad and spending budget. Set to <strong>PAUSED</strong> if you want to review in Meta Ads Manager first.
+            </div>
+          )}
+
+          {error && <div className="alert alert--error" style={{ marginBottom: 12 }}>{error}</div>}
+
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <button className="btn btn--ghost" onClick={() => setStep(4)}>← Edit</button>
+            <button className="btn btn--primary" onClick={handlePublish} disabled={saving}>
+              {saving ? '⏳ Publishing...' : form.status === 'ACTIVE' ? '🚀 Go Live!' : '💾 Save as Draft'}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  TAB: AUDIENCES
+// ═══════════════════════════════════════════════════════════════
+
+function AudiencesTab({ account }) {
+  const [audiences, setAudiences] = useState([]);
+  const [loading,   setLoading]   = useState(false);
+  const [error,     setError]     = useState('');
+
+  useEffect(() => { if (account) load(); }, [account]);
+
+  async function load() {
+    setLoading(true); setError('');
+    try {
+      const data = await listAudiences();
+      setAudiences(data.audiences || []);
+    } catch (e) { setError(e.message); }
+    finally { setLoading(false); }
+  }
+
+  if (!account) return <div className="card" style={{ textAlign: 'center', padding: 48 }}><p style={{ color: 'var(--clr-text-2)' }}>Connect an Ad Account first</p></div>;
+
+  return (
+    <div>
+      {error && <div className="alert alert--error" style={{ marginBottom: 16 }}>{error}</div>}
+      {loading ? (
+        <div className="loading-center"><div className="spinner" /></div>
+      ) : audiences.length === 0 ? (
+        <div className="card" style={{ textAlign: 'center', padding: 48 }}>
+          <div style={{ fontSize: 40, marginBottom: 12 }}>👥</div>
+          <h3>No Custom Audiences</h3>
+          <p style={{ color: 'var(--clr-text-2)' }}>Create Custom Audiences in Meta Ads Manager and they will appear here.</p>
+        </div>
+      ) : (
+        <div className="table-wrap">
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Audience Name</th>
+                <th>Type</th>
+                <th>Approx. Size</th>
+                <th>Description</th>
+              </tr>
+            </thead>
+            <tbody>
+              {audiences.map(a => (
+                <tr key={a.id}>
+                  <td style={{ fontWeight: 600 }}>{a.name}</td>
+                  <td><span className="badge badge--blue">{a.subtype}</span></td>
+                  <td style={{ fontFamily: 'monospace' }}>{a.approximate_count_lower_bound ? formatNum(a.approximate_count_lower_bound) + '+' : '—'}</td>
+                  <td style={{ color: 'var(--clr-text-2)', fontSize: 12 }}>{a.description || '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  TAB: AD ACCOUNTS MANAGEMENT
+// ═══════════════════════════════════════════════════════════════
+
+function AccountsTab({ accounts, onRefresh }) {
+  const [showConnect,   setShowConnect]   = useState(false);
+  const [accessToken,   setAccessToken]   = useState('');
+  const [actId,         setActId]         = useState('');
+  const [metaAccounts,  setMetaAccounts]  = useState([]);
+  const [fetching,      setFetching]      = useState(false);
+  const [connecting,    setConnecting]    = useState(false);
+  const [error,         setError]         = useState('');
+
+  async function fetchFromMeta() {
+    if (!accessToken.trim()) { setError('Paste your Access Token first'); return; }
+    setFetching(true); setError('');
+    try {
+      const data = await fetchMetaAccounts(accessToken.trim());
+      setMetaAccounts(data.accounts || []);
+      if (data.accounts?.length) setActId(data.accounts[0].id);
+    } catch (e) { setError(e.message); }
+    finally { setFetching(false); }
+  }
+
+  async function handleConnect(e) {
+    e.preventDefault();
+    setConnecting(true); setError('');
+    try {
+      await connectAdAccount({ access_token: accessToken.trim(), act_id: actId || undefined });
+      setShowConnect(false);
+      setAccessToken(''); setActId(''); setMetaAccounts([]);
+      onRefresh();
+    } catch (e) { setError(e.message); }
+    finally { setConnecting(false); }
+  }
+
+  async function handleDisconnect(id) {
+    if (!confirm('Disconnect this Ad Account?')) return;
+    try {
+      await disconnectAdAccount(id);
+      onRefresh();
+    } catch (e) { alert(e.message); }
+  }
+
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+        <div style={{ color: 'var(--clr-text-2)', fontSize: 13 }}>{accounts.length} connected ad account{accounts.length !== 1 ? 's' : ''}</div>
+        <button className="btn btn--primary btn--sm" onClick={() => setShowConnect(true)}>+ Connect Ad Account</button>
+      </div>
+
+      {accounts.length === 0 ? (
+        <div className="ads-connect-banner">
+          <div style={{ fontSize: 40, marginBottom: 12 }}>📣</div>
+          <h3>Connect Your First Ad Account</h3>
+          <p>You need a Facebook Business Ad Account to create campaigns. Paste your Access Token below to get started.</p>
+          <button className="btn btn--primary" onClick={() => setShowConnect(true)}>🔗 Connect Now</button>
+        </div>
+      ) : (
+        <div className="table-wrap">
+          <table className="table">
+            <thead>
+              <tr><th>Account</th><th>ID</th><th>Currency</th><th>Status</th><th style={{ textAlign: 'right' }}>Actions</th></tr>
+            </thead>
+            <tbody>
+              {accounts.map(a => (
+                <tr key={a.id}>
+                  <td style={{ fontWeight: 600 }}>{a.name || 'Unnamed'}</td>
+                  <td style={{ fontFamily: 'monospace', fontSize: 12 }}>{a.act_id}</td>
+                  <td>{a.currency}</td>
+                  <td>{a.is_active ? <span className="badge badge--green">Active</span> : <span className="badge badge--gray">Inactive</span>}</td>
+                  <td style={{ textAlign: 'right' }}>
+                    <button className="btn btn--danger btn--sm" onClick={() => handleDisconnect(a.id)} style={{ fontSize: 11, padding: '3px 8px' }}>Disconnect</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Connect Modal */}
+      {showConnect && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowConnect(false)}>
+          <div className="modal-box" style={{ maxWidth: 560 }}>
+            <div className="modal-title">🔗 Connect Meta Ad Account</div>
+            <div style={{ fontSize: 13, color: 'var(--clr-text-2)', marginBottom: 16, lineHeight: 1.5 }}>
+              Generate a <strong>System User Access Token</strong> with <code>ads_management</code> and <code>ads_read</code> permissions from your <a href="https://business.facebook.com" target="_blank" rel="noreferrer" style={{ color: 'var(--clr-primary)' }}>Meta Business Manager</a>.
+            </div>
+
+            {error && <div className="alert alert--error" style={{ marginBottom: 12 }}>{error}</div>}
+
+            <form onSubmit={handleConnect} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div className="form-group">
+                <label className="form-label">Access Token *</label>
+                <textarea
+                  className="form-input"
+                  rows={3}
+                  placeholder="Paste your System User Access Token (EAA...)"
+                  value={accessToken}
+                  onChange={e => setAccessToken(e.target.value)}
+                  required
+                  style={{ fontFamily: 'monospace', fontSize: 11 }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button type="button" className="btn btn--secondary" onClick={fetchFromMeta} disabled={fetching || !accessToken.trim()} style={{ flexShrink: 0 }}>
+                  {fetching ? '⏳ Fetching...' : '🔍 Fetch My Ad Accounts'}
+                </button>
+              </div>
+
+              {metaAccounts.length > 0 && (
+                <div className="form-group">
+                  <label className="form-label">Select Ad Account</label>
+                  <select className="form-input" value={actId} onChange={e => setActId(e.target.value)}>
+                    {metaAccounts.map(a => <option key={a.id} value={a.id}>{a.name} ({a.id}) — {a.currency}</option>)}
+                  </select>
+                </div>
+              )}
+
+              <div className="modal-footer">
+                <button type="button" className="btn btn--ghost" onClick={() => setShowConnect(false)}>Cancel</button>
+                <button type="submit" className="btn btn--primary" disabled={connecting || !accessToken.trim()}>
+                  {connecting ? 'Connecting...' : '✅ Connect Account'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

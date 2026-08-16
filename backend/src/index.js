@@ -13,6 +13,7 @@ const contactRoutes  = require('./routes/contacts');
 const campaignRoutes = require('./routes/campaigns');
 const chatRoutes      = require('./routes/chat');
 const analyticsRoutes = require('./routes/analytics');
+const adsRoutes       = require('./routes/ads');
 
 const app  = express();
 const PORT = process.env.PORT || 5001;
@@ -57,6 +58,7 @@ app.use('/api/v2/contacts',  contactRoutes);
 app.use('/api/v2/campaigns', campaignRoutes);
 app.use('/api/v2/chat',       chatRoutes);
 app.use('/api/v2/analytics',  analyticsRoutes);
+app.use('/api/v2/ads',         adsRoutes);
 
 // ── Health check ───────────────────────────────────────────────────
 app.get('/api/health', (req, res) => {
