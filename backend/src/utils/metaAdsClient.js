@@ -195,6 +195,9 @@ async function createCreative(accessToken, actId, {
   whatsapp_number,
   link_url,
 }) {
+  const cleanPhone = whatsapp_number ? String(whatsapp_number).replace(/\D/g, '') : '';
+  const formattedPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
+
   const objectStorySpec = {
     page_id,
     link_data: {
@@ -205,11 +208,11 @@ async function createCreative(accessToken, actId, {
       call_to_action: {
         type: call_to_action_type,
         value: {
-          whatsapp_number: whatsapp_number,
+          ...(formattedPhone ? { whatsapp_number: formattedPhone } : {}),
           app_destination: 'WHATSAPP',
         },
       },
-      link: link_url || `https://wa.me/${whatsapp_number}`,
+      link: link_url || (formattedPhone ? `https://wa.me/${formattedPhone}` : `https://facebook.com/${page_id}`),
     },
   };
 
@@ -220,7 +223,10 @@ async function createCreative(accessToken, actId, {
       message: body,
       call_to_action: {
         type: call_to_action_type,
-        value: { whatsapp_number, app_destination: 'WHATSAPP' },
+        value: {
+          ...(formattedPhone ? { whatsapp_number: formattedPhone } : {}),
+          app_destination: 'WHATSAPP',
+        },
       },
     };
   }

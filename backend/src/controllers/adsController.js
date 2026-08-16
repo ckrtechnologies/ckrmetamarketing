@@ -501,7 +501,12 @@ async function publishCampaign(req, res) {
     if (!account) return res.status(404).json({ error: 'No connected Ad Account' });
 
     const wabaAccounts = await orgRepo.getWabaAccounts(req.orgId);
-    const whatsappNumber = wabaAccounts[0]?.display_number?.replace(/\D/g, '') || req.body.whatsapp_number;
+    let whatsappNumber = req.body.whatsapp_number || wabaAccounts[0]?.display_number || '';
+    whatsappNumber = String(whatsappNumber).replace(/\D/g, '');
+    if (whatsappNumber.length === 10) {
+      whatsappNumber = '91' + whatsappNumber;
+    }
+
 
     // Step 1: Create Campaign shell
     const campaignResult = await metaAds.createCampaign(account.access_token, account.act_id, {

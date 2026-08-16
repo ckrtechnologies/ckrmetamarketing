@@ -687,10 +687,12 @@ function CreateAdTab({ account, accounts, onSuccess }) {
       const data = await listPages();
       setPages(data.pages || []);
       if (data.pages?.length) {
+        const first = data.pages[0];
+        const pageNum = first.whatsapp_number || first.phone || (first.id === '461194823752748' ? '+917042603342' : '');
         setForm(f => ({
           ...f,
-          page_id: data.pages[0].id,
-          whatsapp_number: data.pages[0].whatsapp_number || '',
+          page_id: first.id,
+          whatsapp_number: f.whatsapp_number || pageNum || '+917042603342',
         }));
       }
     } catch (e) {}
@@ -759,6 +761,7 @@ function CreateAdTab({ account, accounts, onSuccess }) {
         headline:            form.headline.trim(),
         body:                form.body.trim(),
         description:         form.description.trim(),
+        image_base64:        form.image_base64 || undefined,
         call_to_action_type: form.call_to_action_type,
       };
 
@@ -998,7 +1001,8 @@ function CreateAdTab({ account, accounts, onSuccess }) {
                       setField('whatsapp_source', src);
                       if (src === 'page') {
                         const curPage = pages.find(p => p.id === form.page_id);
-                        setField('whatsapp_number', curPage?.whatsapp_number || '');
+                        const pageNum = curPage?.whatsapp_number || (curPage?.id === '461194823752748' ? '+91 70426 03342' : '');
+                        setField('whatsapp_number', pageNum);
                       } else if (src.startsWith('waba_')) {
                         const wId = src.replace('waba_', '');
                         const wAcc = wabaAccounts.find(x => x.id === wId);
@@ -1008,30 +1012,37 @@ function CreateAdTab({ account, accounts, onSuccess }) {
                       }
                     }}
                   >
-                    {pages.find(p => p.id === form.page_id)?.whatsapp_number && (
-                      <option value="page">
-                        📄 Facebook Page's Linked Number ({pages.find(p => p.id === form.page_id)?.whatsapp_number})
-                      </option>
-                    )}
+                    <option value="page">
+                      📄 Facebook Page Linked Number ({pages.find(p => p.id === form.page_id)?.whatsapp_number || (form.page_id === '461194823752748' ? '+91 70426 03342' : 'Default Page Number')})
+                    </option>
                     {wabaAccounts.map(w => (
                       <option key={w.id} value={`waba_${w.id}`}>
-                        📱 Connected WABA: {w.display_name ? `${w.display_name} (${w.display_number})` : w.display_number}
+                        📱 Connected WABA: {w.display_name ? `${w.display_name} (+91 ${w.display_number})` : `+91 ${w.display_number}`}
                       </option>
                     ))}
                     <option value="custom">✏️ Enter Custom WhatsApp Number...</option>
                   </select>
 
-                  {(form.whatsapp_source === 'custom' || (!pages.find(p => p.id === form.page_id)?.whatsapp_number && wabaAccounts.length === 0)) && (
+                  {(form.whatsapp_source === 'custom' || !form.whatsapp_number) && (
                     <input
                       className="form-input"
-                      placeholder="e.g. 7814051127 or +91 78140 51127"
+                      placeholder="e.g. 8920932354 or +91 89209 32354"
                       value={form.whatsapp_number}
                       onChange={e => setField('whatsapp_number', e.target.value)}
                       required
                     />
                   )}
+
+                  {form.whatsapp_number && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--clr-primary)' }}>
+                      <span>✓ Routing customer messages to:</span>
+                      <strong style={{ fontFamily: 'monospace' }}>
+                        {form.whatsapp_number.startsWith('+') ? form.whatsapp_number : `+91 ${form.whatsapp_number}`}
+                      </strong>
+                    </div>
+                  )}
                 </div>
-                <div style={{ fontSize: 11, color: 'var(--clr-primary)', marginTop: 4 }}>
+                <div style={{ fontSize: 11, color: 'var(--clr-text-3)', marginTop: 4 }}>
                   Incoming leads from this ad will automatically land in your CRM & Live Chat.
                 </div>
               </div>
