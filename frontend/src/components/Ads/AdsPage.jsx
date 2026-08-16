@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   listAdAccounts, connectAdAccount, disconnectAdAccount, fetchMetaAccounts, setActiveAdAccount,
+  getOAuthUrl, handleOAuthCallback,
   listCampaigns, createCampaign, updateCampaign, deleteCampaign,
   getAccountInsights, getCampaignInsights, getAccountBalance,
   listAdSets, updateAdSet, deleteAdSet,
   listAds, updateAd, deleteAd,
   listAudiences, createCustomAudience, createLookalikeAudience, createSavedAudience, deleteAudience,
   searchInterests, searchGeoLocations, searchTargetingCategories,
-  listPages,
+  listPages, createPage,
   publishCampaign,
 } from '../../api/ads.js';
 import { listWabaAccounts } from '../../api/waba.js';
@@ -135,7 +136,31 @@ export default function AdsPage() {
   const [error,   setError]   = useState('');
   const [success, setSuccess] = useState('');
 
-  useEffect(() => { loadAccounts(); }, []);
+  useEffect(() => {
+    // Check if redirected from Facebook Login with OAuth code
+    const urlParams = new URLSearchParams(window.location.search);
+    const oauthCode = urlParams.get('code');
+    if (oauthCode) {
+      // Clean query params from URL bar cleanly
+      window.history.replaceState({}, document.title, window.location.pathname);
+      (async () => {
+        setLoadingAccounts(true);
+        try {
+          const redirectUri = window.location.origin + '/ads';
+          const res = await handleOAuthCallback({ code: oauthCode, redirect_uri: redirectUri });
+          setSuccess(res.message || 'Successfully connected Meta Ad Account via Facebook Login!');
+          await loadAccounts();
+        } catch (err) {
+          setError('Facebook Login failed: ' + err.message);
+          await loadAccounts();
+        } finally {
+          setLoadingAccounts(false);
+        }
+      })();
+    } else {
+      loadAccounts();
+    }
+  }, []);
 
   async function loadAccounts() {
     setLoadingAccounts(true);
@@ -485,6 +510,7 @@ function CampaignsTab({ account, onRefresh }) {
   const [expandedTreeId,  setExpandedTreeId]  = useState(null);
   const [treeData,        setTreeData]        = useState({});
   const [customAudiences, setCustomAudiences] = useState([]);
+  const [savedAudiences,  setSavedAudiences]  = useState([]);
   const [editingItem,     setEditingItem]     = useState(null); // { type: 'campaign'|'adset'|'ad', item: obj, campaignId?: string }
 
   useEffect(() => { if (account) load(); }, [account]);
@@ -494,10 +520,11 @@ function CampaignsTab({ account, onRefresh }) {
     try {
       const [campData, audData] = await Promise.all([
         listCampaigns(),
-        listAudiences().catch(() => ({ custom_audiences: [] }))
+        listAudiences().catch(() => ({ custom_audiences: [], saved_audiences: [] }))
       ]);
       setCampaigns(campData.campaigns || []);
       setCustomAudiences(audData.custom_audiences || audData.audiences || []);
+      setSavedAudiences(audData.saved_audiences || []);
     } catch (e) { setError(e.message); }
     finally { setLoading(false); }
   }
@@ -1176,6 +1203,7 @@ function CampaignsTab({ account, onRefresh }) {
           target={editingItem}
           currency={account.currency}
           customAudiences={customAudiences}
+          savedAudiences={savedAudiences}
           onClose={() => setEditingItem(null)}
           onSaved={() => {
             setEditingItem(null);
@@ -1194,7 +1222,14 @@ function CampaignsTab({ account, onRefresh }) {
 //  REUSABLE COMPONENT: FULL META TARGETING BUILDER
 // ═══════════════════════════════════════════════════════════════
 
-function FullTargetingBuilder({ targeting = {}, onChange, customAudiences = [], showPlacements = true }) {
+// ═══════════════════════════════════════════════════════════════
+//  REUSABLE COMPONENT: FULL META TARGETING BUILDER
+// ═══════════════════════════════════════════════════════════════
+
+function FullTargetingBuilder({ targeting = {}, onChange, customAudiences = [], savedAudiences = [], showPlacements = true }) {
+  // Saved Audience Preset Selection
+  const [selectedSavedAudienceId, setSelectedSavedAudienceId] = useState('');
+
   // Locations
   const geo = targeting.geo_locations || {};
   const [country, setCountry] = useState(geo.countries?.[0] || 'IN');
@@ -1327,6 +1362,62 @@ function FullTargetingBuilder({ targeting = {}, onChange, customAudiences = [], 
     placementMode, devices, deviceOs, wifiOnly, publishers, advantageExpansion
   ]);
 
+  // Handle picking a saved audience to auto-populate all targeting parameters
+  function handleSelectSavedAudience(audId) {
+    setSelectedSavedAudienceId(audId);
+    if (!audId) return;
+    const saved = savedAudiences.find(s => s.id === audId);
+    if (!saved || !saved.targeting) return;
+
+    const t = saved.targeting;
+    if (t.geo_locations) {
+      if (t.geo_locations.countries?.[0]) setCountry(t.geo_locations.countries[0]);
+      if (t.geo_locations.location_types?.[0]) setLocationType(t.geo_locations.location_types[0]);
+      if (t.geo_locations.cities) setCities(t.geo_locations.cities);
+      if (t.geo_locations.regions) setRegions(t.geo_locations.regions);
+    }
+    if (t.age_min) setAgeMin(t.age_min);
+    if (t.age_max) setAgeMax(t.age_max);
+    if (t.genders?.[0] !== undefined) setGender(t.genders[0]);
+    if (t.locales) setLocales(t.locales);
+
+    const inc = [];
+    const nar = [];
+    if (t.flexible_spec && t.flexible_spec.length > 0) {
+      const main = t.flexible_spec[0];
+      if (main.interests) main.interests.forEach(i => inc.push({ ...i, category: 'Interest' }));
+      if (main.behaviors) main.behaviors.forEach(b => inc.push({ ...b, category: 'Behavior' }));
+      if (main.work_positions) main.work_positions.forEach(w => inc.push({ ...w, category: 'Job Title' }));
+      if (main.demographics) main.demographics.forEach(d => inc.push({ ...d, category: 'Demographic' }));
+
+      if (t.flexible_spec.length > 1) {
+        const sec = t.flexible_spec[1];
+        if (sec.interests) sec.interests.forEach(i => nar.push({ ...i, category: 'Interest' }));
+        if (sec.behaviors) sec.behaviors.forEach(b => nar.push({ ...b, category: 'Behavior' }));
+        if (sec.work_positions) sec.work_positions.forEach(w => nar.push({ ...w, category: 'Job Title' }));
+      }
+    } else if (t.interests) {
+      t.interests.forEach(i => inc.push({ ...i, category: 'Interest' }));
+    }
+    setIncludes(inc);
+    setNarrows(nar);
+    if (nar.length > 0) setShowNarrow(true);
+
+    const exc = [];
+    if (t.exclusions) {
+      if (t.exclusions.interests) t.exclusions.interests.forEach(i => exc.push({ ...i, category: 'Interest' }));
+      if (t.exclusions.behaviors) t.exclusions.behaviors.forEach(b => exc.push({ ...b, category: 'Behavior' }));
+    }
+    setExcludes(exc);
+    if (exc.length > 0) setShowExclude(true);
+
+    if (t.custom_audiences) setIncludedAudiences(t.custom_audiences.map(a => a.id));
+    if (t.excluded_custom_audiences) setExcludedAudiences(t.excluded_custom_audiences.map(a => a.id));
+    if (t.device_platforms) setDevices(t.device_platforms);
+    if (t.publisher_platforms) setPublishers(t.publisher_platforms);
+    if (t.targeting_automation?.detailed_targeting_expansion) setAdvantageExpansion(true);
+  }
+
   // Geo search
   async function handleSearchGeo(q) {
     setGeoQuery(q);
@@ -1388,6 +1479,58 @@ function FullTargetingBuilder({ targeting = {}, onChange, customAudiences = [], 
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {/* ── 0. USE SAVED AUDIENCE (OPTIONAL 1-CLICK LOADER) ── */}
+      {savedAudiences.length > 0 && (
+        <div style={{
+          background: 'linear-gradient(135deg, rgba(37,211,102,.08), rgba(24,119,242,.06))',
+          border: '1px solid rgba(37,211,102,.25)',
+          borderRadius: 10,
+          padding: '14px 16px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 10
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--clr-text)', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span>📁 Use a Saved Audience</span>
+              <span className="badge badge--green" style={{ fontSize: 10, padding: '2px 8px' }}>{savedAudiences.length} Available</span>
+            </div>
+            {selectedSavedAudienceId && (
+              <button
+                type="button"
+                className="btn btn--ghost btn--sm"
+                style={{ fontSize: 11, padding: '2px 8px', color: 'var(--clr-text-2)' }}
+                onClick={() => setSelectedSavedAudienceId('')}
+              >
+                Reset to Custom
+              </button>
+            )}
+          </div>
+
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+            <select
+              className="form-input"
+              style={{ flex: 1, borderColor: selectedSavedAudienceId ? '#25d366' : 'var(--clr-border)', fontWeight: 600 }}
+              value={selectedSavedAudienceId}
+              onChange={e => handleSelectSavedAudience(e.target.value)}
+            >
+              <option value="">Choose a Saved Audience preset to prefill targeting...</option>
+              {savedAudiences.map(s => (
+                <option key={s.id} value={s.id}>
+                  {s.name} {s.approximate_count_lower_bound ? `(👥 ~${(s.approximate_count_lower_bound / 1000000).toFixed(1)}M people)` : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {selectedSavedAudienceId && (
+            <div style={{ fontSize: 11.5, color: '#25d366', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span>✓ Targeting populated from "{savedAudiences.find(s => s.id === selectedSavedAudienceId)?.name}". You can review or tweak settings below.</span>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* ── 1. GEOGRAPHIC LOCATIONS ── */}
       <div className="targeting-section-box">
         <div className="targeting-section-header">
@@ -1436,6 +1579,7 @@ function FullTargetingBuilder({ targeting = {}, onChange, customAudiences = [], 
             </div>
           </div>
         )}
+
 
         {/* Live City & Region Autocomplete */}
         <div className="form-group" style={{ position: 'relative' }}>
@@ -1936,7 +2080,7 @@ function FullTargetingBuilder({ targeting = {}, onChange, customAudiences = [], 
 //  MODAL: EDIT ENTITY (Campaign, AdSet, Ad & Creative)
 // ═══════════════════════════════════════════════════════════════
 
-function EditEntityModal({ target, currency, customAudiences = [], onClose, onSaved }) {
+function EditEntityModal({ target, currency, customAudiences = [], savedAudiences = [], onClose, onSaved }) {
   const { type, item } = target;
   
   // General
@@ -1997,13 +2141,14 @@ function EditEntityModal({ target, currency, customAudiences = [], onClose, onSa
         if (budget) payload.daily_budget = Math.round(parseFloat(budget) * 100);
         await updateCampaign(item.id, payload);
       } else if (type === 'adset') {
+        const startMs = startTime ? new Date(startTime).getTime() : 0;
+        const isFutureStart = !isNaN(startMs) && startMs > Date.now();
         const payload = {
           name: name.trim(),
           status,
           daily_budget: budget || undefined,
-          optimization_goal: optGoal,
           bid_strategy: bidStrategy,
-          start_time: startTime ? new Date(startTime).toISOString() : undefined,
+          start_time: isFutureStart ? new Date(startTime).toISOString() : undefined,
           end_time: endTime ? new Date(endTime).toISOString() : undefined,
           targeting: targetingPayload,
         };
@@ -2028,6 +2173,8 @@ function EditEntityModal({ target, currency, customAudiences = [], onClose, onSa
       setSaving(false);
     }
   }
+
+  const isAlreadyStarted = item.start_time && new Date(item.start_time).getTime() <= Date.now();
 
   return (
     <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
@@ -2119,8 +2266,10 @@ function EditEntityModal({ target, currency, customAudiences = [], onClose, onSa
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                   <div className="form-group">
-                    <label className="form-label">Start Schedule (Optional)</label>
-                    <input className="form-input" type="datetime-local" value={startTime} onChange={e => setStartTime(e.target.value)} />
+                    <label className="form-label">
+                      Start Schedule {isAlreadyStarted && <span style={{ fontSize: 10, color: 'var(--clr-text-3)', fontWeight: 400 }}>(Ad Set live — cannot be edited)</span>}
+                    </label>
+                    <input className="form-input" type="datetime-local" value={startTime} disabled={isAlreadyStarted} onChange={e => setStartTime(e.target.value)} />
                   </div>
                   <div className="form-group">
                     <label className="form-label">End Schedule (Optional)</label>
@@ -2137,6 +2286,7 @@ function EditEntityModal({ target, currency, customAudiences = [], onClose, onSa
               targeting={item.targeting || {}}
               onChange={setTargetingPayload}
               customAudiences={customAudiences}
+              savedAudiences={savedAudiences}
               showPlacements={true}
             />
           )}
@@ -2234,16 +2384,43 @@ function EditEntityModal({ target, currency, customAudiences = [], onClose, onSa
 // ═══════════════════════════════════════════════════════════════
 
 function CreateAdTab({ account, accounts, onSuccess }) {
-  const [step,         setStep]         = useState(1);
-  const [pages,        setPages]        = useState([]);
-  const [wabaAccounts, setWabaAccounts] = useState([]);
-  const [saving,       setSaving]       = useState(false);
-  const [error,        setError]        = useState('');
+  const [step,            setStep]            = useState(1);
+  const [pages,           setPages]           = useState([]);
+  const [wabaAccounts,    setWabaAccounts]    = useState([]);
+  const [savedAudiences,  setSavedAudiences]  = useState([]);
+  const [customAudiences, setCustomAudiences] = useState([]);
+  const [saving,          setSaving]          = useState(false);
+  const [error,           setError]           = useState('');
 
   // Interest search state
   const [interestQuery,       setInterestQuery]       = useState('');
   const [interestSuggestions, setInterestSuggestions] = useState([]);
   const [searchingInterests,  setSearchingInterests]  = useState(false);
+
+  // Create Page modal
+  const [showCreatePageModal, setShowCreatePageModal] = useState(false);
+  const [pageForm, setPageForm] = useState({ name: '', category: 'BUSINESS_CONSULTANT', about: '' });
+  const [creatingPage, setCreatingPage] = useState(false);
+
+  async function handleCreatePage(e) {
+    e.preventDefault();
+    if (!pageForm.name.trim()) return;
+    setCreatingPage(true);
+    try {
+      const res = await createPage(pageForm);
+      setShowCreatePageModal(false);
+      setPageForm({ name: '', category: 'BUSINESS_CONSULTANT', about: '' });
+      await loadPages();
+      if (res.page?.id) {
+        setField('page_id', res.page.id);
+      }
+      alert('✅ Facebook Page created successfully!');
+    } catch (err) {
+      alert('Could not create page: ' + err.message);
+    } finally {
+      setCreatingPage(false);
+    }
+  }
 
   // Form state
   const [targetingPayload, setTargetingPayload] = useState({});
@@ -2278,13 +2455,24 @@ function CreateAdTab({ account, accounts, onSuccess }) {
     reader.readAsDataURL(file);
   }
 
-
   useEffect(() => {
     if (account) {
       loadPages();
       loadWabaNumbers();
+      loadAudiences();
     }
   }, [account]);
+
+  async function loadAudiences() {
+    try {
+      const data = await listAudiences();
+      setSavedAudiences(data.saved_audiences || []);
+      setCustomAudiences(data.custom_audiences || data.audiences || []);
+    } catch {
+      setSavedAudiences([]);
+      setCustomAudiences([]);
+    }
+  }
 
   async function loadPages() {
     try {
@@ -2421,6 +2609,8 @@ function CreateAdTab({ account, accounts, onSuccess }) {
           <FullTargetingBuilder
             targeting={targetingPayload}
             onChange={setTargetingPayload}
+            savedAudiences={savedAudiences}
+            customAudiences={customAudiences}
             showPlacements={false}
           />
 
@@ -2476,7 +2666,17 @@ function CreateAdTab({ account, accounts, onSuccess }) {
             {/* Left: Form */}
             <div>
               <div className="form-group">
-                <label className="form-label">Facebook Page *</label>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                  <label className="form-label" style={{ margin: 0 }}>Facebook Page *</label>
+                  <button
+                    type="button"
+                    className="btn btn--secondary btn--sm"
+                    style={{ fontSize: 11, padding: '2px 8px' }}
+                    onClick={() => setShowCreatePageModal(true)}
+                  >
+                    ✨ + Create New Page
+                  </button>
+                </div>
                 {pages.length > 0 ? (
                   <select
                     className="form-input"
@@ -2492,8 +2692,45 @@ function CreateAdTab({ account, accounts, onSuccess }) {
                     {pages.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                   </select>
                 ) : (
-                  <div style={{ fontSize: 12, color: 'var(--clr-text-3)', background: 'var(--clr-surface-2)', padding: '10px 12px', borderRadius: 8 }}>
-                    ⚠️ No Facebook Pages found. Make sure your access token has `pages_read_engagement` permission.
+                  <div style={{
+                    background: 'rgba(255, 170, 0, 0.08)',
+                    border: '1px solid rgba(255, 170, 0, 0.3)',
+                    padding: '14px 16px',
+                    borderRadius: 8,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 10
+                  }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: '#ffb300' }}>
+                      ⚠️ No Facebook Page Found
+                    </div>
+                    <div style={{ fontSize: 12, color: 'var(--clr-text-2)', lineHeight: 1.4 }}>
+                      Meta requires a Facebook Page to represent your brand on Facebook & Instagram ads.
+                    </div>
+                    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                      <button
+                        type="button"
+                        className="btn btn--primary btn--sm"
+                        onClick={() => setShowCreatePageModal(true)}
+                      >
+                        ✨ + Create Page in 1 Click
+                      </button>
+                      <a
+                        href="https://www.facebook.com/pages/create/"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="btn btn--secondary btn--sm"
+                      >
+                        🔗 Create on Facebook.com ↗
+                      </a>
+                      <button
+                        type="button"
+                        className="btn btn--ghost btn--sm"
+                        onClick={loadPages}
+                      >
+                        ↻ Refresh
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
@@ -2710,6 +2947,68 @@ function CreateAdTab({ account, accounts, onSuccess }) {
             <button className="btn btn--primary" onClick={handlePublish} disabled={saving}>
               {saving ? '⏳ Publishing...' : form.status === 'ACTIVE' ? '🚀 Go Live!' : '💾 Save as Draft'}
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Modal: Create Facebook Page ─── */}
+      {showCreatePageModal && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowCreatePageModal(false)}>
+          <div className="modal-box" style={{ maxWidth: 480 }}>
+            <div className="modal-title">✨ Create Facebook Page</div>
+            <div style={{ fontSize: 13, color: 'var(--clr-text-2)', marginBottom: 16, lineHeight: 1.4 }}>
+              Create a Facebook Page for your business in 1 click. Meta requires a Page to run ads on Facebook & Instagram.
+            </div>
+
+            <form onSubmit={handleCreatePage} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div className="form-group">
+                <label className="form-label">Page / Business Name *</label>
+                <input
+                  className="form-input"
+                  placeholder="e.g. Acme Tech Solutions"
+                  value={pageForm.name}
+                  onChange={e => setPageForm(f => ({ ...f, name: e.target.value }))}
+                  required
+                  autoFocus
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Category *</label>
+                <select
+                  className="form-input"
+                  value={pageForm.category}
+                  onChange={e => setPageForm(f => ({ ...f, category: e.target.value }))}
+                >
+                  <option value="BUSINESS_CONSULTANT">💼 Business Consultant</option>
+                  <option value="LOCAL_BUSINESS">🏢 Local Business</option>
+                  <option value="SHOPPING_RETAIL">🛍️ Retail & Shopping</option>
+                  <option value="E_COMMERCE_WEBSITE">🛒 E-Commerce</option>
+                  <option value="REAL_ESTATE">🏠 Real Estate</option>
+                  <option value="HEALTH_BEAUTY">💅 Health & Beauty</option>
+                  <option value="EDUCATION">🎓 Education</option>
+                  <option value="MARKETING_AGENCY">📈 Marketing Agency</option>
+                </select>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">About / Description (Optional)</label>
+                <textarea
+                  className="form-input"
+                  rows={2}
+                  placeholder="Briefly describe what your business offers..."
+                  value={pageForm.about}
+                  onChange={e => setPageForm(f => ({ ...f, about: e.target.value }))}
+                />
+              </div>
+
+              <div className="modal-footer" style={{ marginTop: 8 }}>
+                <button type="button" className="btn btn--ghost" onClick={() => setShowCreatePageModal(false)}>Cancel</button>
+                <button type="submit" className="btn btn--primary" disabled={creatingPage || !pageForm.name.trim()}>
+                  {creatingPage ? 'Creating...' : '✨ Create Page'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
@@ -3105,18 +3404,129 @@ function AudiencesTab({ account }) {
   );
 }
 
-// ═══════════════════════════════════════════════════════════════
-//  TAB: AD ACCOUNTS MANAGEMENT
-// ═══════════════════════════════════════════════════════════════
+function initFacebookSdk(appId = '1636065948040030') {
+  return new Promise((resolve, reject) => {
+    if (window.FB) {
+      resolve(window.FB);
+      return;
+    }
+    window.fbAsyncInit = function () {
+      try {
+        window.FB.init({
+          appId: appId,
+          cookie: true,
+          xfbml: true,
+          version: 'v22.0',
+        });
+        resolve(window.FB);
+      } catch (e) {
+        reject(e);
+      }
+    };
+    if (!document.getElementById('facebook-jssdk')) {
+      const js = document.createElement('script');
+      js.id = 'facebook-jssdk';
+      js.src = 'https://connect.facebook.net/en_US/sdk.js';
+      js.onerror = () => reject(new Error('Failed to load Facebook SDK'));
+      document.body.appendChild(js);
+    }
+  });
+}
 
 function AccountsTab({ accounts, onRefresh, onSwitchAccount, accountBalance }) {
-  const [showConnect,   setShowConnect]   = useState(false);
-  const [accessToken,   setAccessToken]   = useState('');
-  const [actId,         setActId]         = useState('');
-  const [metaAccounts,  setMetaAccounts]  = useState([]);
-  const [fetching,      setFetching]      = useState(false);
-  const [connecting,    setConnecting]    = useState(false);
-  const [error,         setError]         = useState('');
+  const [showConnect,     setShowConnect]     = useState(false);
+  const [useTokenMode,    setUseTokenMode]    = useState(false);
+  const [loggingInFb,     setLoggingInFb]     = useState(false);
+  const [accessToken,     setAccessToken]     = useState('');
+  const [actId,           setActId]           = useState('');
+  const [metaAccounts,    setMetaAccounts]    = useState([]);
+  const [fetching,        setFetching]        = useState(false);
+  const [connecting,      setConnecting]      = useState(false);
+  const [error,           setError]           = useState('');
+
+  async function handleFacebookOAuth() {
+    setLoggingInFb(true); setError('');
+    try {
+      // Primary: Official Facebook JS SDK (FB.login) — opens clean popup without strict domain redirect checks
+      const FB = await initFacebookSdk('1636065948040030');
+      FB.login((response) => {
+        if (response.authResponse && response.authResponse.accessToken) {
+          const userToken = response.authResponse.accessToken;
+          setConnecting(true);
+          connectAdAccount({ access_token: userToken })
+            .then(res => {
+              setShowConnect(false);
+              onRefresh();
+              alert(res.message || '✅ Successfully connected your Meta Ad Account!');
+            })
+            .catch(err => setError(err.message))
+            .finally(() => {
+              setConnecting(false);
+              setLoggingInFb(false);
+            });
+        } else {
+          setLoggingInFb(false);
+          if (response.status === 'not_authorized') {
+            setError('Permissions not granted. Please approve permissions in the Facebook popup.');
+          }
+        }
+      }, {
+        scope: 'ads_management,ads_read,pages_read_engagement,pages_manage_ads,pages_show_list,business_management,leads_retrieval',
+        return_scopes: true
+      });
+    } catch {
+      // Secondary: Standard OAuth redirect fallback
+      try {
+        const redirectUri = window.location.origin + '/ads';
+        const authData = await getOAuthUrl({ redirect_uri: redirectUri });
+        if (!authData?.url) throw new Error('Could not generate Facebook authorization URL');
+
+        const width = 640, height = 720;
+        const left = window.screen.width / 2 - width / 2;
+        const top = window.screen.height / 2 - height / 2;
+        const popup = window.open(
+          authData.url,
+          'MetaOAuthLogin',
+          `width=${width},height=${height},top=${top},left=${left},toolbar=no,menubar=no,location=no,status=no`
+        );
+
+        if (!popup || popup.closed || typeof popup.closed === 'undefined') {
+          window.location.href = authData.url;
+          return;
+        }
+
+        const checkInterval = setInterval(async () => {
+          try {
+            if (popup.closed) {
+              clearInterval(checkInterval);
+              setLoggingInFb(false);
+              return;
+            }
+            const popupHref = popup.location?.href;
+            if (popupHref && popupHref.includes('/ads') && popupHref.includes('code=')) {
+              clearInterval(checkInterval);
+              const popupParams = new URLSearchParams(popup.location.search);
+              const code = popupParams.get('code');
+              popup.close();
+
+              if (code) {
+                setConnecting(true);
+                const res = await handleOAuthCallback({ code, redirect_uri: redirectUri });
+                setShowConnect(false);
+                onRefresh();
+                alert(res.message || 'Connected successfully!');
+              }
+            }
+          } catch {
+            // cross-origin
+          }
+        }, 500);
+      } catch (err) {
+        setError(err.message);
+        setLoggingInFb(false);
+      }
+    }
+  }
 
   async function fetchFromMeta() {
     if (!accessToken.trim()) { setError('Paste your Access Token first'); return; }
@@ -3195,7 +3605,7 @@ function AccountsTab({ accounts, onRefresh, onSwitchAccount, accountBalance }) {
                   {formatCurrency(accountBalance.spend_cap_remaining_num, activeAcc.currency)}
                 </div>
                 <div style={{ fontSize: 11, color: 'var(--clr-text-3)', marginTop: 2 }}>
-                  Cap limit: {formatCurrency((balanceInfo?.spend_cap_num || accountBalance.spend_cap_num || 0), activeAcc.currency)}
+                  Cap limit: {formatCurrency((accountBalance.spend_cap_num || 0), activeAcc.currency)}
                 </div>
               </div>
             )}
@@ -3217,11 +3627,31 @@ function AccountsTab({ accounts, onRefresh, onSwitchAccount, accountBalance }) {
       </div>
 
       {accounts.length === 0 ? (
-        <div className="ads-connect-banner">
-          <div style={{ fontSize: 40, marginBottom: 12 }}>📣</div>
-          <h3>Connect Your First Ad Account</h3>
-          <p>You need a Facebook Business Ad Account to create campaigns. Paste your Access Token below to get started.</p>
-          <button className="btn btn--primary" onClick={() => setShowConnect(true)}>🔗 Connect Now</button>
+        <div className="ads-connect-banner" style={{ textAlign: 'center', padding: '48px 24px', background: 'var(--clr-surface)', borderRadius: 12, border: '1px solid var(--clr-border)' }}>
+          <div style={{ fontSize: 48, marginBottom: 12 }}>📣</div>
+          <h3 style={{ fontSize: 20, fontWeight: 800, marginBottom: 8 }}>Connect Your Meta Ad Account</h3>
+          <p style={{ color: 'var(--clr-text-2)', maxWidth: 480, margin: '0 auto 20px', lineHeight: 1.5 }}>
+            Log in with Facebook to automatically discover and link your ad accounts. No manual access tokens required!
+          </p>
+          <button
+            className="btn btn--primary"
+            style={{
+              padding: '12px 24px',
+              fontSize: 14,
+              fontWeight: 800,
+              background: '#1877f2',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 10,
+              boxShadow: '0 4px 16px rgba(24,119,242,.35)'
+            }}
+            onClick={() => setShowConnect(true)}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="#ffffff">
+              <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+            </svg>
+            Connect with Facebook (1-Click)
+          </button>
         </div>
       ) : (
         <div className="table-wrap">
@@ -3268,53 +3698,127 @@ function AccountsTab({ accounts, onRefresh, onSwitchAccount, accountBalance }) {
       {/* Connect Modal */}
       {showConnect && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowConnect(false)}>
-          <div className="modal-box" style={{ maxWidth: 560 }}>
+          <div className="modal-box" style={{ maxWidth: 540 }}>
             <div className="modal-title">🔗 Connect Meta Ad Account</div>
-            <div style={{ fontSize: 13, color: 'var(--clr-text-2)', marginBottom: 16, lineHeight: 1.5 }}>
-              Generate a <strong>System User Access Token</strong> with <code>ads_management</code> and <code>ads_read</code> permissions from your <a href="https://business.facebook.com" target="_blank" rel="noreferrer" style={{ color: 'var(--clr-primary)' }}>Meta Business Manager</a>.
+            <div style={{ fontSize: 13, color: 'var(--clr-text-2)', marginBottom: 20, lineHeight: 1.5 }}>
+              Connect your Meta Ad Account to run campaigns, track real-time ad spend, and sync Click-to-WhatsApp leads.
             </div>
 
-            {error && <div className="alert alert--error" style={{ marginBottom: 12 }}>{error}</div>}
+            {error && <div className="alert alert--error" style={{ marginBottom: 16 }}>{error}</div>}
 
-            <form onSubmit={handleConnect} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              <div className="form-group">
-                <label className="form-label">Access Token *</label>
-                <textarea
-                  className="form-input"
-                  rows={3}
-                  placeholder="Paste your System User Access Token (EAA...)"
-                  value={accessToken}
-                  onChange={e => setAccessToken(e.target.value)}
-                  required
-                  style={{ fontFamily: 'monospace', fontSize: 11 }}
-                />
+            {/* ── METHOD 1: 1-CLICK FACEBOOK LOGIN (CLIENT-FRIENDLY HERO) ── */}
+            <div style={{
+              background: 'linear-gradient(135deg, rgba(24,119,242,0.12), rgba(37,211,102,0.06))',
+              border: '1.5px solid rgba(24,119,242,0.35)',
+              borderRadius: 12,
+              padding: '20px',
+              textAlign: 'center',
+              marginBottom: 20
+            }}>
+              <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--clr-text)', marginBottom: 6 }}>
+                ✨ 1-Click Facebook OAuth Connect
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--clr-text-2)', maxWidth: 440, margin: '0 auto 16px', lineHeight: 1.4 }}>
+                No API tokens or manual developer settings required. Log in with your Facebook account and we will securely connect your ad accounts.
               </div>
 
-              <div style={{ display: 'flex', gap: 10 }}>
-                <button type="button" className="btn btn--secondary" onClick={fetchFromMeta} disabled={fetching || !accessToken.trim()} style={{ flexShrink: 0 }}>
-                  {fetching ? '⏳ Fetching...' : '🔍 Fetch My Ad Accounts'}
-                </button>
+              <button
+                type="button"
+                className="btn btn--primary"
+                style={{
+                  width: '100%',
+                  padding: '13px 20px',
+                  fontSize: 14,
+                  fontWeight: 800,
+                  background: '#1877f2',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 10,
+                  boxShadow: '0 4px 16px rgba(24,119,242,.35)',
+                  border: 'none',
+                  borderRadius: 8,
+                  cursor: (loggingInFb || connecting) ? 'not-allowed' : 'pointer'
+                }}
+                onClick={handleFacebookOAuth}
+                disabled={loggingInFb || connecting}
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="#ffffff">
+                  <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+                </svg>
+                {loggingInFb ? 'Opening Facebook Login...' : connecting ? 'Connecting Ad Accounts...' : 'Log in with Facebook'}
+              </button>
+            </div>
+
+            {/* ── METHOD 2: MANUAL SYSTEM USER TOKEN (FOR ADVANCED / DEVELOPERS) ── */}
+            <div style={{ borderTop: '1px solid var(--clr-border)', paddingTop: 14 }}>
+              <div
+                style={{
+                  fontSize: 12,
+                  fontWeight: 700,
+                  color: 'var(--clr-text-2)',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '4px 0'
+                }}
+                onClick={() => setUseTokenMode(!useTokenMode)}
+              >
+                <span>⚙️ Advanced: Connect with System User Token</span>
+                <span style={{ fontSize: 11 }}>{useTokenMode ? '▲ Hide' : '▼ Expand'}</span>
               </div>
 
-              {metaAccounts.length > 0 && (
-                <div className="form-group">
-                  <label className="form-label">Select Ad Account</label>
-                  <select className="form-input" value={actId} onChange={e => setActId(e.target.value)}>
-                    {metaAccounts.map(a => <option key={a.id} value={a.id}>{a.name} ({a.id}) — {a.currency}</option>)}
-                  </select>
-                </div>
+              {useTokenMode && (
+                <form onSubmit={handleConnect} style={{ display: 'flex', flexDirection: 'column', gap: 14, marginTop: 14 }}>
+                  <div style={{ fontSize: 12, color: 'var(--clr-text-3)' }}>
+                    Paste a System User Access Token from Meta Business Manager with <code>ads_management</code> and <code>ads_read</code> permissions.
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">Access Token *</label>
+                    <textarea
+                      className="form-input"
+                      rows={3}
+                      placeholder="Paste System User Access Token (EAA...)"
+                      value={accessToken}
+                      onChange={e => setAccessToken(e.target.value)}
+                      required
+                      style={{ fontFamily: 'monospace', fontSize: 11 }}
+                    />
+                  </div>
+
+                  <div style={{ display: 'flex', gap: 10 }}>
+                    <button type="button" className="btn btn--secondary btn--sm" onClick={fetchFromMeta} disabled={fetching || !accessToken.trim()}>
+                      {fetching ? '⏳ Fetching...' : '🔍 Fetch My Ad Accounts'}
+                    </button>
+                  </div>
+
+                  {metaAccounts.length > 0 && (
+                    <div className="form-group">
+                      <label className="form-label">Select Ad Account</label>
+                      <select className="form-input" value={actId} onChange={e => setActId(e.target.value)}>
+                        {metaAccounts.map(a => <option key={a.id} value={a.id}>{a.name} ({a.id}) — {a.currency}</option>)}
+                      </select>
+                    </div>
+                  )}
+
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+                    <button type="submit" className="btn btn--primary btn--sm" disabled={connecting || !accessToken.trim()}>
+                      {connecting ? 'Connecting...' : 'Connect with Token'}
+                    </button>
+                  </div>
+                </form>
               )}
+            </div>
 
-              <div className="modal-footer">
-                <button type="button" className="btn btn--ghost" onClick={() => setShowConnect(false)}>Cancel</button>
-                <button type="submit" className="btn btn--primary" disabled={connecting || !accessToken.trim()}>
-                  {connecting ? 'Connecting...' : '✅ Connect Account'}
-                </button>
-              </div>
-            </form>
+            <div className="modal-footer" style={{ marginTop: 16 }}>
+              <button type="button" className="btn btn--ghost" onClick={() => setShowConnect(false)}>Close</button>
+            </div>
           </div>
         </div>
       )}
     </div>
   );
 }
+

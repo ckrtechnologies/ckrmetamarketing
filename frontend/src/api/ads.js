@@ -1,5 +1,9 @@
 import { apiCall } from './auth.js';
 
+// ── OAuth (1-Click Connect with Facebook Login) ──────────────────
+export const getOAuthUrl        = (params = {})    => apiCall('GET',    '/v2/ads/oauth/url?' + new URLSearchParams(params).toString());
+export const handleOAuthCallback = (data)          => apiCall('POST',   '/v2/ads/oauth/callback', data);
+
 // ── Ad Accounts ──────────────────────────────────────────────────
 export const listAdAccounts    = ()               => apiCall('GET',    '/v2/ads/accounts');
 export const fetchMetaAccounts = (access_token)   => apiCall('GET',    `/v2/ads/meta-accounts?access_token=${encodeURIComponent(access_token)}`);
@@ -10,6 +14,7 @@ export const disconnectAdAccount = (id)           => apiCall('DELETE', `/v2/ads/
 
 // ── Pages ────────────────────────────────────────────────────────
 export const listPages         = ()               => apiCall('GET',    '/v2/ads/pages');
+export const createPage        = (data)           => apiCall('POST',   '/v2/ads/pages', data);
 
 // ── Campaigns ────────────────────────────────────────────────────
 export const listCampaigns     = (params = {})    => apiCall('GET',    '/v2/ads/campaigns?' + new URLSearchParams(params).toString());

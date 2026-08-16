@@ -60,6 +60,47 @@ async function createAdAccount(org_id, { act_id, name, currency, timezone, acces
   return data;
 }
 
+async function upsertAdAccount(org_id, { act_id, name, currency, timezone, access_token, is_active = true }) {
+  const { data: existing } = await supabase()
+    .from('ad_accounts')
+    .select('id')
+    .eq('org_id', org_id)
+    .eq('act_id', act_id)
+    .maybeSingle();
+
+  if (is_active) {
+    await supabase()
+      .from('ad_accounts')
+      .update({ is_active: false })
+      .eq('org_id', org_id);
+  }
+
+  if (existing) {
+    const { data, error } = await supabase()
+      .from('ad_accounts')
+      .update({
+        name,
+        currency,
+        timezone,
+        access_token,
+        ...(is_active ? { is_active: true } : {}),
+      })
+      .eq('id', existing.id)
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  } else {
+    const { data, error } = await supabase()
+      .from('ad_accounts')
+      .insert({ org_id, act_id, name, currency, timezone, access_token, is_active })
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  }
+}
+
 async function setActiveAdAccount(org_id, id) {
   await supabase()
     .from('ad_accounts')
@@ -208,7 +249,7 @@ async function getInsights(org_id, { meta_id, days = 30 } = {}) {
 }
 
 module.exports = {
-  getAdAccounts, getAdAccount, getActiveAdAccount, createAdAccount, setActiveAdAccount, updateAdAccount, deleteAdAccount,
+  getAdAccounts, getAdAccount, getActiveAdAccount, createAdAccount, upsertAdAccount, setActiveAdAccount, updateAdAccount, deleteAdAccount,
   getAdCampaigns, upsertAdCampaign, updateAdCampaignStatus, deleteAdCampaign,
   saveInsights, getInsights,
 };

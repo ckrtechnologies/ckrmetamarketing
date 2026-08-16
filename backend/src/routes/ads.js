@@ -2,6 +2,10 @@ const router = require('express').Router();
 const { authenticate } = require('../middleware/auth');
 const ctrl = require('../controllers/adsController');
 
+// ── OAuth (1-Click Connect with Facebook Login) ──────────────────
+router.get('/oauth/url',              authenticate, ctrl.getOAuthUrl);
+router.post('/oauth/callback',        authenticate, ctrl.handleOAuthCallback);
+
 // ── Ad Accounts ─────────────────────────────────────────────────
 router.get('/accounts',              authenticate, ctrl.listAdAccounts);
 router.post('/accounts',             authenticate, ctrl.connectAdAccount);
@@ -14,6 +18,7 @@ router.get('/meta-accounts',     authenticate, ctrl.listMetaAdAccounts);
 
 // Facebook Pages (needed for ad creative)
 router.get('/pages',             authenticate, ctrl.listPages);
+router.post('/pages',            authenticate, ctrl.createPage);
 
 // ── Campaigns ────────────────────────────────────────────────────
 router.get('/campaigns',                    authenticate, ctrl.listCampaigns);

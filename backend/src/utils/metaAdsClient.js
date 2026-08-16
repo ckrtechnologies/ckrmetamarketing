@@ -196,8 +196,20 @@ async function createAdSet(accessToken, actId, {
 }
 
 async function updateAdSet(accessToken, adsetId, updates) {
-  const r = await client(accessToken).post(`/${adsetId}`, updates);
-  return r.data;
+  try {
+    const r = await client(accessToken).post(`/${adsetId}`, updates);
+    return r.data;
+  } catch (err) {
+    const errData = err.response?.data?.error;
+    // Error subcode 1487057: "start_time cannot be edited if the ad set has already started"
+    if ((errData?.error_subcode === 1487057 || errData?.message?.includes('start_time')) && updates.start_time) {
+      const retryUpdates = { ...updates };
+      delete retryUpdates.start_time;
+      const r = await client(accessToken).post(`/${adsetId}`, retryUpdates);
+      return r.data;
+    }
+    throw err;
+  }
 }
 
 async function deleteAdSet(accessToken, adsetId) {
@@ -492,6 +504,16 @@ async function listPages(accessToken) {
   return r.data?.data || [];
 }
 
+async function createPage(accessToken, { name, category = 'BUSINESS_CONSULTANT', about = '' }) {
+  const r = await client(accessToken).post('/me/accounts', {
+    name,
+    category_enum: category,
+    about,
+    access_token: accessToken,
+  });
+  return r.data; // { id, access_token }
+}
+
 // ── Image Upload ──────────────────────────────────────────────
 
 async function uploadImage(accessToken, actId, imageBase64) {
@@ -509,7 +531,56 @@ async function uploadImage(accessToken, actId, imageBase64) {
   return firstKey ? images[firstKey] : null; // { hash, url }
 }
 
+// ── OAuth ─────────────────────────────────────────────────────
+
+function getOAuthUrl(redirectUri, state = '') {
+  const appId = process.env.META_APP_ID || process.env.FB_APP_ID;
+  if (!appId) throw new Error('META_APP_ID is not configured');
+
+  const scope = 'ads_management,ads_read,pages_read_engagement,pages_manage_ads,pages_show_list,business_management,leads_retrieval';
+  const url = `https://www.facebook.com/v22.0/dialog/oauth?client_id=${appId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scope)}&response_type=code${state ? `&state=${encodeURIComponent(state)}` : ''}`;
+  return { app_id: appId, url, scope };
+}
+
+async function exchangeOAuthCode(code, redirectUri) {
+  const appId = process.env.META_APP_ID || process.env.FB_APP_ID;
+  const appSecret = process.env.META_APP_SECRET || process.env.FB_APP_SECRET;
+  if (!appId || !appSecret) throw new Error('META_APP_ID and META_APP_SECRET must be configured');
+
+  const r = await axios.get('https://graph.facebook.com/v22.0/oauth/access_token', {
+    params: {
+      client_id: appId,
+      client_secret: appSecret,
+      redirect_uri: redirectUri,
+      code,
+    },
+  });
+  return r.data; // { access_token, token_type, expires_in }
+}
+
+async function getLongLivedToken(shortLivedToken) {
+  const appId = process.env.META_APP_ID || process.env.FB_APP_ID;
+  const appSecret = process.env.META_APP_SECRET || process.env.FB_APP_SECRET;
+  if (!appId || !appSecret) return shortLivedToken;
+
+  try {
+    const r = await axios.get('https://graph.facebook.com/v22.0/oauth/access_token', {
+      params: {
+        grant_type: 'fb_exchange_token',
+        client_id: appId,
+        client_secret: appSecret,
+        fb_exchange_token: shortLivedToken,
+      },
+    });
+    return r.data?.access_token || shortLivedToken;
+  } catch (err) {
+    console.warn('[getLongLivedToken] Falling back to short-lived token:', err.response?.data || err.message);
+    return shortLivedToken;
+  }
+}
+
 module.exports = {
+  getOAuthUrl, exchangeOAuthCode, getLongLivedToken,
   getAdAccounts, getAdAccount,
   listCampaigns, createCampaign, updateCampaign, deleteCampaign,
   listAdSets, createAdSet, updateAdSet, deleteAdSet,
@@ -519,6 +590,7 @@ module.exports = {
   listCustomAudiences, listSavedAudiences,
   createCustomAudience, uploadUsersToAudience, createLookalikeAudience, createSavedAudience, deleteAudience,
   searchInterests, searchGeoLocations, searchTargetingCategories,
-  listPages, uploadImage,
+  listPages, createPage, uploadImage,
 };
+
 

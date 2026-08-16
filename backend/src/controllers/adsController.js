@@ -25,10 +25,12 @@ async function listAdAccounts(req, res) {
 
 async function connectAdAccount(req, res) {
   try {
-    const { access_token, act_id: providedActId } = req.body;
-    if (!access_token) return res.status(400).json({ error: 'access_token is required' });
+    const { access_token: rawToken, act_id: providedActId } = req.body;
+    if (!rawToken) return res.status(400).json({ error: 'access_token is required' });
 
-    // If no act_id provided, fetch the first available from Meta
+    // Upgrade to long-lived 60-day token if applicable
+    const access_token = await metaAds.getLongLivedToken(rawToken.trim());
+
     let act_id = providedActId;
     let name = req.body.name;
     let currency = req.body.currency || 'INR';
@@ -36,12 +38,22 @@ async function connectAdAccount(req, res) {
 
     if (!act_id) {
       const accounts = await metaAds.getAdAccounts(access_token);
-      if (!accounts.length) return res.status(404).json({ error: 'No Ad Accounts found for this token. Ensure ads_management permission is granted.' });
-      const first = accounts[0];
-      act_id   = first.id;
-      name     = first.name;
-      currency = first.currency || 'INR';
-      timezone = first.timezone_name || 'Asia/Kolkata';
+      if (!accounts.length) return res.status(404).json({ error: 'No Ad Accounts found for this token. Ensure ads_management permission is granted in Meta Business Manager.' });
+
+      const savedAccounts = [];
+      for (let i = 0; i < accounts.length; i++) {
+        const a = accounts[i];
+        const saved = await adsRepo.upsertAdAccount(req.orgId, {
+          act_id: a.id,
+          name: a.name || `Ad Account ${a.id}`,
+          currency: a.currency || 'INR',
+          timezone: a.timezone_name || 'Asia/Kolkata',
+          access_token,
+          is_active: i === 0,
+        });
+        savedAccounts.push(saved);
+      }
+      return res.status(201).json({ success: true, count: savedAccounts.length, accounts: savedAccounts, account: savedAccounts[0] });
     } else {
       // Verify token + account is accessible
       try {
@@ -52,10 +64,10 @@ async function connectAdAccount(req, res) {
       } catch (e) {
         return res.status(400).json({ error: 'Could not verify ad account: ' + e.message });
       }
-    }
 
-    const account = await adsRepo.createAdAccount(req.orgId, { act_id, name, currency, timezone, access_token });
-    res.status(201).json({ account });
+      const account = await adsRepo.upsertAdAccount(req.orgId, { act_id, name, currency, timezone, access_token, is_active: true });
+      return res.status(201).json({ success: true, account });
+    }
   } catch (err) {
     console.error('[adsController:connect]', err.message);
     res.status(500).json({ error: err.message });
@@ -85,6 +97,68 @@ async function disconnectAdAccount(req, res) {
   } catch (err) { res.status(500).json({ error: err.message }); }
 }
 
+async function getOAuthUrl(req, res) {
+  try {
+    const redirectUri = req.query.redirect_uri || `${req.headers.origin || 'http://localhost:5173'}/ads`;
+    const state = req.query.state || req.orgId;
+    const authData = metaAds.getOAuthUrl(redirectUri, state);
+    res.json(authData);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+}
+
+async function handleOAuthCallback(req, res) {
+  try {
+    const { code, redirect_uri } = req.body;
+    if (!code) return res.status(400).json({ error: 'OAuth code is required' });
+
+    const redirectUri = redirect_uri || `${req.headers.origin || 'http://localhost:5173'}/ads`;
+
+    // 1. Exchange code for short-lived user token
+    const tokenData = await metaAds.exchangeOAuthCode(code, redirectUri);
+    const shortToken = tokenData.access_token;
+    if (!shortToken) return res.status(400).json({ error: 'Failed to exchange authorization code for access token' });
+
+    // 2. Exchange for long-lived 60-day user token
+    const longLivedToken = await metaAds.getLongLivedToken(shortToken);
+
+    // 3. Fetch all ad accounts accessible with this token
+    const discoveredAccounts = await metaAds.getAdAccounts(longLivedToken);
+    if (!discoveredAccounts || !discoveredAccounts.length) {
+      return res.status(404).json({
+        error: 'No Ad Accounts found for this Facebook account. Please ensure your Facebook account has Advertiser or Admin access to an Ad Account in Meta Business Manager.'
+      });
+    }
+
+    // 4. Upsert discovered ad accounts into database
+    const savedAccounts = [];
+    for (let i = 0; i < discoveredAccounts.length; i++) {
+      const a = discoveredAccounts[i];
+      const saved = await adsRepo.upsertAdAccount(req.orgId, {
+        act_id: a.id,
+        name: a.name || `Ad Account ${a.id}`,
+        currency: a.currency || 'INR',
+        timezone: a.timezone_name || 'Asia/Kolkata',
+        access_token: longLivedToken,
+        is_active: i === 0, // Set the first one as active by default
+      });
+      savedAccounts.push(saved);
+    }
+
+    res.json({
+      success: true,
+      count: savedAccounts.length,
+      accounts: savedAccounts,
+      message: `Successfully connected ${savedAccounts.length} Meta Ad Account${savedAccounts.length !== 1 ? 's' : ''}!`,
+    });
+  } catch (err) {
+    const detail = err.response?.data?.error?.message || err.message;
+    console.error('[handleOAuthCallback]', detail, err.response?.data);
+    res.status(400).json({ error: detail });
+  }
+}
+
 async function listMetaAdAccounts(req, res) {
   try {
     const { access_token } = req.query;
@@ -107,6 +181,23 @@ async function listPages(req, res) {
     res.json({ pages });
   } catch (err) {
     const detail = err.response?.data?.error?.message || err.message;
+    res.status(400).json({ error: detail });
+  }
+}
+
+async function createPage(req, res) {
+  try {
+    const { name, category, about } = req.body;
+    if (!name) return res.status(400).json({ error: 'Page name is required' });
+
+    const account = await adsRepo.getActiveAdAccount(req.orgId);
+    if (!account) return res.status(404).json({ error: 'No connected Ad Account' });
+
+    const page = await metaAds.createPage(account.access_token, { name, category, about });
+    res.status(201).json({ success: true, page });
+  } catch (err) {
+    const detail = err.response?.data?.error?.message || err.message;
+    console.error('[createPage]', detail);
     res.status(400).json({ error: detail });
   }
 }
@@ -278,7 +369,12 @@ async function updateAdSet(req, res) {
       updates.daily_budget = Math.round(parseFloat(req.body.daily_budget) * 100);
     }
     if (req.body.optimization_goal) updates.optimization_goal = req.body.optimization_goal;
-    if (req.body.start_time) updates.start_time = req.body.start_time;
+    if (req.body.start_time) {
+      const startMs = new Date(req.body.start_time).getTime();
+      if (!isNaN(startMs) && startMs > Date.now()) {
+        updates.start_time = req.body.start_time;
+      }
+    }
     if (req.body.end_time) updates.end_time = req.body.end_time;
 
     // Full Targeting updates
@@ -785,8 +881,9 @@ async function publishCampaign(req, res) {
 }
 
 module.exports = {
+  getOAuthUrl, handleOAuthCallback,
   listAdAccounts, connectAdAccount, setActiveAdAccount, updateAdAccount, disconnectAdAccount, listMetaAdAccounts,
-  listPages,
+  listPages, createPage,
   listCampaigns, createCampaign, updateCampaign, deleteCampaign, publishCampaign,
   listAdSets, createAdSet, updateAdSet, deleteAdSet,
   listAds, updateAd, deleteAd,
