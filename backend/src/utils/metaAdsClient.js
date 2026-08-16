@@ -133,7 +133,6 @@ async function createAdSet(accessToken, actId, {
   start_time,
   end_time,
   status = 'PAUSED',
-  whatsapp_phone_number,
   page_id,
 }) {
   const payload = {
@@ -142,6 +141,7 @@ async function createAdSet(accessToken, actId, {
     billing_event,
     optimization_goal,
     destination_type,
+    bid_strategy: 'LOWEST_COST_WITHOUT_CAP',
     targeting: {
       geo_locations: targeting.geo_locations || { countries: ['IN'] },
       age_min: targeting.age_min || 18,
@@ -153,7 +153,7 @@ async function createAdSet(accessToken, actId, {
       } : {}),
     },
     promoted_object: {
-      page_id: page_id,
+      page_id: String(page_id),
     },
     status,
   };
