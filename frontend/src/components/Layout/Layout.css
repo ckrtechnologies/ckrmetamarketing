@@ -1,0 +1,156 @@
+/* ── Sidebar ─────────────────────────────────────────────────── */
+.sidebar {
+  width: var(--sidebar-w);
+  min-height: 100vh;
+  background: var(--clr-surface);
+  border-right: 1px solid var(--clr-border);
+  display: flex;
+  flex-direction: column;
+  position: fixed;
+  top: 0; left: 0; bottom: 0;
+  z-index: 100;
+  padding: 0;
+  overflow: hidden;
+}
+
+.sidebar__logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 20px 18px 14px;
+  border-bottom: 1px solid var(--clr-border);
+}
+.sidebar__logo-icon { font-size: 22px; }
+.sidebar__logo-brand {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--clr-text);
+  line-height: 1;
+}
+.sidebar__logo-sub { font-size: 10.5px; color: var(--clr-primary); font-weight: 600; letter-spacing: .04em; }
+
+.sidebar__org-badge {
+  margin: 10px 14px;
+  padding: 8px 12px;
+  background: var(--clr-primary-bg);
+  border: 1px solid var(--clr-primary-bd);
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.sidebar__org-name { font-size: 12px; font-weight: 700; color: var(--clr-primary); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sidebar__org-plan { font-size: 9.5px; }
+
+.sidebar__nav {
+  flex: 1;
+  padding: 10px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow-y: auto;
+}
+
+.sidebar__nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border-radius: var(--radius-sm);
+  color: var(--clr-text-2);
+  font-size: 13px;
+  font-weight: 500;
+  transition: all 0.15s;
+}
+.sidebar__nav-item:hover { background: rgba(255,255,255,.04); color: var(--clr-text); }
+.sidebar__nav-item--active {
+  background: var(--clr-primary-bg) !important;
+  color: var(--clr-primary) !important;
+  font-weight: 700;
+  border: 1px solid var(--clr-primary-bd);
+}
+.sidebar__nav-icon { font-size: 15px; width: 20px; text-align: center; flex-shrink: 0; }
+.sidebar__nav-label { flex: 1; }
+
+.sidebar__footer {
+  padding: 12px 14px;
+  border-top: 1px solid var(--clr-border);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.sidebar__user { display: flex; align-items: center; gap: 10px; }
+.sidebar__user-avatar {
+  width: 32px; height: 32px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--clr-primary-dk), var(--clr-accent));
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 800; color: #fff;
+  flex-shrink: 0;
+}
+.sidebar__user-meta { flex: 1; min-width: 0; }
+.sidebar__user-name { font-size: 12.5px; font-weight: 600; color: var(--clr-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sidebar__user-role { font-size: 9.5px; margin-top: 2px; }
+
+.sidebar__logout { width: 100%; justify-content: center; }
+
+/* ── App Layout ─────────────────────────────────────────────── */
+.app-layout {
+  display: flex;
+  min-height: 100vh;
+}
+.app-main {
+  flex: 1;
+  margin-left: var(--sidebar-w);
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+.app-content {
+  flex: 1;
+  padding: 28px 32px;
+  max-width: 1400px;
+  width: 100%;
+}
+
+/* ── Top Bar ─────────────────────────────────────────────────── */
+.topbar {
+  height: var(--topbar-h);
+  background: var(--clr-surface);
+  border-bottom: 1px solid var(--clr-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 32px;
+  position: sticky;
+  top: 0;
+  z-index: 50;
+}
+.topbar__title {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--clr-text);
+}
+.topbar__actions { display: flex; align-items: center; gap: 10px; }
+
+/* ── Page Header ─────────────────────────────────────────────── */
+.page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 24px;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.page-header h1 {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--clr-text);
+  margin-bottom: 3px;
+}
+.page-header p { font-size: 13px; color: var(--clr-text-2); }
+.page-header__actions { display: flex; gap: 10px; align-items: center; }
