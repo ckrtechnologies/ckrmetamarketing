@@ -257,6 +257,42 @@ async function createAdSet(req, res) {
   }
 }
 
+async function updateAdSet(req, res) {
+  try {
+    const account = await adsRepo.getActiveAdAccount(req.orgId);
+    if (!account) return res.status(404).json({ error: 'No connected Ad Account' });
+
+    const updates = {};
+    if (req.body.name) updates.name = req.body.name.trim();
+    if (req.body.status) updates.status = req.body.status;
+    if (req.body.daily_budget !== undefined) {
+      updates.daily_budget = Math.round(parseFloat(req.body.daily_budget) * 100);
+    }
+    if (req.body.lifetime_budget !== undefined) {
+      updates.lifetime_budget = Math.round(parseFloat(req.body.lifetime_budget) * 100);
+    }
+
+    const result = await metaAds.updateAdSet(account.access_token, req.params.id, updates);
+    res.json({ success: true, adset_id: req.params.id, updates, result });
+  } catch (err) {
+    const detail = err.response?.data?.error?.message || err.message;
+    res.status(400).json({ error: detail });
+  }
+}
+
+async function deleteAdSet(req, res) {
+  try {
+    const account = await adsRepo.getActiveAdAccount(req.orgId);
+    if (!account) return res.status(404).json({ error: 'No connected Ad Account' });
+
+    await metaAds.deleteAdSet(account.access_token, req.params.id);
+    res.json({ success: true, id: req.params.id });
+  } catch (err) {
+    const detail = err.response?.data?.error?.message || err.message;
+    res.status(400).json({ error: detail });
+  }
+}
+
 // ── Ads ───────────────────────────────────────────────────────
 
 async function listAds(req, res) {
@@ -270,6 +306,37 @@ async function listAds(req, res) {
     res.status(400).json({ error: detail });
   }
 }
+
+async function updateAd(req, res) {
+  try {
+    const account = await adsRepo.getActiveAdAccount(req.orgId);
+    if (!account) return res.status(404).json({ error: 'No connected Ad Account' });
+
+    const updates = {};
+    if (req.body.name) updates.name = req.body.name.trim();
+    if (req.body.status) updates.status = req.body.status;
+
+    const result = await metaAds.updateAd(account.access_token, req.params.id, updates);
+    res.json({ success: true, ad_id: req.params.id, updates, result });
+  } catch (err) {
+    const detail = err.response?.data?.error?.message || err.message;
+    res.status(400).json({ error: detail });
+  }
+}
+
+async function deleteAd(req, res) {
+  try {
+    const account = await adsRepo.getActiveAdAccount(req.orgId);
+    if (!account) return res.status(404).json({ error: 'No connected Ad Account' });
+
+    await metaAds.deleteAd(account.access_token, req.params.id);
+    res.json({ success: true, id: req.params.id });
+  } catch (err) {
+    const detail = err.response?.data?.error?.message || err.message;
+    res.status(400).json({ error: detail });
+  }
+}
+
 
 // ── Insights ──────────────────────────────────────────────────
 
@@ -604,8 +671,8 @@ module.exports = {
   listAdAccounts, connectAdAccount, updateAdAccount, disconnectAdAccount, listMetaAdAccounts,
   listPages,
   listCampaigns, createCampaign, updateCampaign, deleteCampaign, publishCampaign,
-  listAdSets, createAdSet,
-  listAds,
+  listAdSets, createAdSet, updateAdSet, deleteAdSet,
+  listAds, updateAd, deleteAd,
   getCampaignInsights, getAccountInsights,
   listAudiences, createCustomAudience, createLookalikeAudience, createSavedAudience, deleteAudience, searchInterests,
 };

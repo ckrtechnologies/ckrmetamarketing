@@ -23,9 +23,14 @@ export const publishCampaign   = (data)           => apiCall('POST',   '/v2/ads/
 // ── Ad Sets ──────────────────────────────────────────────────────
 export const listAdSets        = (params = {})    => apiCall('GET',    '/v2/ads/adsets?' + new URLSearchParams(params).toString());
 export const createAdSet       = (data)           => apiCall('POST',   '/v2/ads/adsets', data);
+export const updateAdSet       = (id, data)       => apiCall('PATCH',  `/v2/ads/adsets/${id}`, data);
+export const deleteAdSet       = (id)             => apiCall('DELETE', `/v2/ads/adsets/${id}`);
 
 // ── Ads ──────────────────────────────────────────────────────────
 export const listAds           = (params = {})    => apiCall('GET',    '/v2/ads/ads?' + new URLSearchParams(params).toString());
+export const updateAd          = (id, data)       => apiCall('PATCH',  `/v2/ads/ads/${id}`, data);
+export const deleteAd          = (id)             => apiCall('DELETE', `/v2/ads/ads/${id}`);
+
 
 // ── Insights Dashboard ───────────────────────────────────────────
 export const getAccountInsights = (params = {})   => apiCall('GET',    '/v2/ads/insights?' + new URLSearchParams(params).toString());

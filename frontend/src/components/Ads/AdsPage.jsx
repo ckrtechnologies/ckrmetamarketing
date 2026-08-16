@@ -3,6 +3,8 @@ import {
   listAdAccounts, connectAdAccount, disconnectAdAccount, fetchMetaAccounts,
   listCampaigns, createCampaign, updateCampaign, deleteCampaign,
   getAccountInsights, getCampaignInsights,
+  listAdSets, updateAdSet, deleteAdSet,
+  listAds, updateAd, deleteAd,
   listAudiences, createCustomAudience, createLookalikeAudience, createSavedAudience, deleteAudience, searchInterests,
   listPages,
   publishCampaign,
@@ -297,10 +299,13 @@ function CampaignsTab({ account, onRefresh }) {
   const [sortKey, setSortKey] = useState('created_time');
   const [sortDir, setSortDir] = useState('desc'); // 'asc' | 'desc'
 
-  const [loading,      setLoading]      = useState(false);
-  const [error,        setError]        = useState('');
-  const [expandedId,   setExpandedId]   = useState(null);
-  const [insights,     setInsights]     = useState({});
+  const [loading,         setLoading]         = useState(false);
+  const [error,           setError]           = useState('');
+  const [expandedId,      setExpandedId]      = useState(null);
+  const [insights,        setInsights]        = useState({});
+  const [expandedTreeId,  setExpandedTreeId]  = useState(null);
+  const [treeData,        setTreeData]        = useState({});
+  const [editingItem,     setEditingItem]     = useState(null); // { type: 'campaign'|'adset'|'ad', item: obj, campaignId?: string }
 
   useEffect(() => { if (account) load(); }, [account]);
 
@@ -336,6 +341,85 @@ function CampaignsTab({ account, onRefresh }) {
       const data = await getCampaignInsights(c.id, { date_preset: 'last_30d' });
       setInsights(prev => ({ ...prev, [c.id]: data }));
     } catch (e) {}
+  }
+
+  async function loadTree(campaignId) {
+    if (expandedTreeId === campaignId) {
+      setExpandedTreeId(null);
+      return;
+    }
+    setExpandedTreeId(campaignId);
+    setTreeData(prev => ({ ...prev, [campaignId]: { ...(prev[campaignId] || {}), loading: true } }));
+    try {
+      const [setsRes, adsRes] = await Promise.all([
+        listAdSets({ campaign_id: campaignId }),
+        listAds({ campaign_id: campaignId }),
+      ]);
+      setTreeData(prev => ({
+        ...prev,
+        [campaignId]: { adsets: setsRes.adsets || [], ads: adsRes.ads || [], loading: false }
+      }));
+    } catch (e) {
+      setTreeData(prev => ({ ...prev, [campaignId]: { ...(prev[campaignId] || {}), loading: false, error: e.message } }));
+    }
+  }
+
+  async function toggleAdSetStatus(campaignId, adset) {
+    const newStatus = adset.status === 'ACTIVE' ? 'PAUSED' : 'ACTIVE';
+    try {
+      await updateAdSet(adset.id, { status: newStatus });
+      setTreeData(prev => ({
+        ...prev,
+        [campaignId]: {
+          ...prev[campaignId],
+          adsets: prev[campaignId]?.adsets?.map(a => a.id === adset.id ? { ...a, status: newStatus, effective_status: newStatus } : a) || []
+        }
+      }));
+      load(); // refresh campaign aggregated budget
+    } catch (e) { alert(e.message); }
+  }
+
+  async function handleDeleteAdSet(campaignId, adset) {
+    if (!confirm(`Delete Ad Set "${adset.name}"?`)) return;
+    try {
+      await deleteAdSet(adset.id);
+      setTreeData(prev => ({
+        ...prev,
+        [campaignId]: {
+          ...prev[campaignId],
+          adsets: prev[campaignId]?.adsets?.filter(a => a.id !== adset.id) || []
+        }
+      }));
+      load();
+    } catch (e) { alert(e.message); }
+  }
+
+  async function toggleAdStatus(campaignId, ad) {
+    const newStatus = ad.status === 'ACTIVE' ? 'PAUSED' : 'ACTIVE';
+    try {
+      await updateAd(ad.id, { status: newStatus });
+      setTreeData(prev => ({
+        ...prev,
+        [campaignId]: {
+          ...prev[campaignId],
+          ads: prev[campaignId]?.ads?.map(a => a.id === ad.id ? { ...a, status: newStatus, effective_status: newStatus } : a) || []
+        }
+      }));
+    } catch (e) { alert(e.message); }
+  }
+
+  async function handleDeleteAd(campaignId, ad) {
+    if (!confirm(`Delete Ad "${ad.name}"?`)) return;
+    try {
+      await deleteAd(ad.id);
+      setTreeData(prev => ({
+        ...prev,
+        [campaignId]: {
+          ...prev[campaignId],
+          ads: prev[campaignId]?.ads?.filter(a => a.id !== ad.id) || []
+        }
+      }));
+    } catch (e) { alert(e.message); }
   }
 
   function handleSort(key) {
@@ -428,14 +512,18 @@ function CampaignsTab({ account, onRefresh }) {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <div style={{ color: 'var(--clr-text-3)', fontSize: 12 }}>Showing {filteredCampaigns.length} of {campaigns.length}</div>
-          <button className="btn btn--ghost btn--sm" onClick={load} disabled={loading}>↻ Refresh</button>
+          <span style={{ fontSize: 12, color: 'var(--clr-text-3)' }}>
+            Showing {filteredCampaigns.length} of {campaigns.length}
+          </span>
+          <button className="btn btn--secondary btn--sm" onClick={load} disabled={loading}>
+            {loading ? '...' : '↻ Refresh'}
+          </button>
         </div>
       </div>
 
-      {/* Expandable Advanced Filter Panel */}
+      {/* Advanced Filter Panel */}
       {showFilterPanel && (
-        <div className="card fade-in" style={{ padding: '16px 20px', marginBottom: 18, background: 'var(--clr-surface-2)', border: '1px solid var(--clr-border)' }}>
+        <div className="card" style={{ marginBottom: 16, padding: '16px 20px', background: 'var(--clr-surface-2)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
             <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--clr-text)' }}>🎛 Advanced Filter Panel</span>
             {hasActiveFilters && (
@@ -488,17 +576,6 @@ function CampaignsTab({ account, onRefresh }) {
                 onChange={e => setMaxBudget(e.target.value)}
               />
             </div>
-
-            <div className="form-group" style={{ marginBottom: 0 }}>
-              <label className="form-label" style={{ fontSize: 11 }}>Sort By</label>
-              <select className="form-input" style={{ fontSize: 12, padding: '6px 10px' }} value={sortKey} onChange={e => setSortKey(e.target.value)}>
-                <option value="created_time">Date Created (Newest)</option>
-                <option value="name">Campaign Name (A-Z)</option>
-                <option value="budget">Budget (Amount)</option>
-                <option value="status">Status</option>
-                <option value="objective">Objective</option>
-              </select>
-            </div>
           </div>
         </div>
       )}
@@ -509,14 +586,11 @@ function CampaignsTab({ account, onRefresh }) {
         <div className="loading-center"><div className="spinner" /></div>
       ) : filteredCampaigns.length === 0 ? (
         <div className="card" style={{ textAlign: 'center', padding: 48 }}>
-          <div style={{ fontSize: 40, marginBottom: 12 }}>📣</div>
-          <h3>No matching campaigns</h3>
-          <p style={{ color: 'var(--clr-text-2)', marginBottom: 16 }}>
-            {hasActiveFilters ? 'No campaigns match your active search or filter criteria.' : 'Create your first Click-to-WhatsApp campaign'}
+          <div style={{ fontSize: 36, marginBottom: 10 }}>📣</div>
+          <div style={{ fontWeight: 700, marginBottom: 4 }}>No campaigns found</div>
+          <p style={{ color: 'var(--clr-text-2)', fontSize: 13 }}>
+            {campaigns.length === 0 ? 'Create your first campaign to get started' : 'No campaigns match the current filters'}
           </p>
-          {hasActiveFilters && (
-            <button className="btn btn--secondary btn--sm" onClick={clearAllFilters}>Clear All Filters</button>
-          )}
         </div>
       ) : (
         <div className="table-wrap">
@@ -542,80 +616,385 @@ function CampaignsTab({ account, onRefresh }) {
               </tr>
             </thead>
             <tbody>
-              {filteredCampaigns.map(c => (
-                <React.Fragment key={c.id}>
-                  <tr>
-                    <td>
-                      <div style={{ fontWeight: 600, fontSize: 13 }}>{c.name}</div>
-                      <div style={{ fontSize: 11, color: 'var(--clr-text-3)', marginTop: 2 }}>ID: {c.id}</div>
-                    </td>
-                    <td>
-                      <span style={{ fontSize: 12, color: 'var(--clr-text-2)' }}>
-                        {OBJECTIVES.find(o => o.key === c.objective)?.icon || '📢'}&nbsp;
-                        {c.objective?.replace('OUTCOME_', '') || '—'}
-                      </span>
-                    </td>
-                    <td>
-                      <span style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--clr-text)' }}>
-                        {formatBudgetDisplay(c, account.currency)}
-                      </span>
-                    </td>
-                    <td><StatusPill status={c.status} /></td>
-                    <td style={{ fontSize: 11, color: 'var(--clr-text-3)' }}>
-                      {c.created_time ? new Date(c.created_time).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}
-                    </td>
-                    <td style={{ textAlign: 'right' }}>
-                      <div style={{ display: 'inline-flex', gap: 6 }}>
-                        <button className="btn btn--secondary btn--sm" style={{ fontSize: 11, padding: '3px 8px' }} onClick={() => loadInsights(c)}>
-                          {expandedId === c.id ? '▲ Insights' : '📊 Insights'}
-                        </button>
-                        <button
-                          className="btn btn--secondary btn--sm"
-                          style={{ fontSize: 11, padding: '3px 8px' }}
-                          onClick={() => toggleStatus(c)}
-                          disabled={['DELETED', 'ARCHIVED'].includes(c.status)}
-                        >
-                          {c.status === 'ACTIVE' ? '⏸ Pause' : '▶ Resume'}
-                        </button>
-                        <button className="btn btn--danger btn--sm" style={{ fontSize: 11, padding: '3px 8px' }} onClick={() => handleDelete(c)}>
-                          ✕
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
+              {filteredCampaigns.map(c => {
+                const currentTree = treeData[c.id];
+                const isTreeOpen = expandedTreeId === c.id;
 
-                  {/* Inline Insights Row */}
-                  {expandedId === c.id && insights[c.id] && (
+                return (
+                  <React.Fragment key={c.id}>
                     <tr>
-                      <td colSpan={6} style={{ background: 'rgba(37,211,102,.04)', padding: '16px 20px' }}>
-                        {insights[c.id].totals ? (
-                          <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
-                            {[
-                              ['Impressions', formatNum(insights[c.id].totals?.impressions)],
-                              ['Clicks', formatNum(insights[c.id].totals?.clicks)],
-                              ['Spend', formatCurrency(insights[c.id].totals?.spend, account.currency)],
-                              ['Reach', formatNum(insights[c.id].totals?.reach)],
-                              ['CTR', `${(parseFloat(insights[c.id].totals?.ctr || 0) * 100).toFixed(2)}%`],
-                              ['CPC', formatCurrency(insights[c.id].totals?.cpc, account.currency)],
-                            ].map(([label, val]) => (
-                              <div key={label}>
-                                <div style={{ fontSize: 10, color: 'var(--clr-text-3)', fontWeight: 700, textTransform: 'uppercase' }}>{label}</div>
-                                <div style={{ fontSize: 18, fontWeight: 900, color: 'var(--clr-text)', fontFamily: 'var(--font-display)' }}>{val}</div>
-                              </div>
-                            ))}
-                          </div>
-                        ) : (
-                          <span style={{ color: 'var(--clr-text-3)', fontSize: 12 }}>No insights data for this campaign yet.</span>
-                        )}
+                      <td>
+                        <div style={{ fontWeight: 600, fontSize: 13 }}>{c.name}</div>
+                        <div style={{ fontSize: 11, color: 'var(--clr-text-3)', marginTop: 2 }}>ID: {c.id}</div>
+                      </td>
+                      <td>
+                        <span style={{ fontSize: 12, color: 'var(--clr-text-2)' }}>
+                          {OBJECTIVES.find(o => o.key === c.objective)?.icon || '📢'}&nbsp;
+                          {c.objective?.replace('OUTCOME_', '') || '—'}
+                        </span>
+                      </td>
+                      <td>
+                        <span style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--clr-text)' }}>
+                          {formatBudgetDisplay(c, account.currency)}
+                        </span>
+                      </td>
+                      <td><StatusPill status={c.status} /></td>
+                      <td style={{ fontSize: 11, color: 'var(--clr-text-3)' }}>
+                        {c.created_time ? new Date(c.created_time).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}
+                      </td>
+                      <td style={{ textAlign: 'right' }}>
+                        <div style={{ display: 'inline-flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                          <button
+                            className={`btn btn--sm ${isTreeOpen ? 'btn--primary' : 'btn--secondary'}`}
+                            style={{ fontSize: 11, padding: '3px 8px' }}
+                            onClick={() => loadTree(c.id)}
+                          >
+                            {isTreeOpen ? '▲ Hide' : '📦 Ad Sets & Ads'}
+                          </button>
+                          <button className="btn btn--secondary btn--sm" style={{ fontSize: 11, padding: '3px 8px' }} onClick={() => loadInsights(c)}>
+                            {expandedId === c.id ? '▲ Insights' : '📊 Insights'}
+                          </button>
+                          <button
+                            className="btn btn--secondary btn--sm"
+                            style={{ fontSize: 11, padding: '3px 8px' }}
+                            onClick={() => setEditingItem({ type: 'campaign', item: c })}
+                          >
+                            ✏️ Edit
+                          </button>
+                          <button
+                            className="btn btn--secondary btn--sm"
+                            style={{ fontSize: 11, padding: '3px 8px' }}
+                            onClick={() => toggleStatus(c)}
+                            disabled={['DELETED', 'ARCHIVED'].includes(c.status)}
+                          >
+                            {c.status === 'ACTIVE' ? '⏸ Pause' : '▶ Resume'}
+                          </button>
+                          <button className="btn btn--danger btn--sm" style={{ fontSize: 11, padding: '3px 8px' }} onClick={() => handleDelete(c)}>
+                            ✕
+                          </button>
+                        </div>
                       </td>
                     </tr>
-                  )}
-                </React.Fragment>
-              ))}
+
+                    {/* Inline Ad Sets & Ads Tree Hierarchy */}
+                    {isTreeOpen && (
+                      <tr>
+                        <td colSpan={6} style={{ background: 'rgba(0, 0, 0, 0.35)', padding: '16px 20px' }}>
+                          {currentTree?.loading ? (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 12, color: 'var(--clr-text-2)' }}>
+                              <div className="spinner" style={{ width: 16, height: 16 }} />
+                              <span>Loading Ad Sets and Ads from Meta...</span>
+                            </div>
+                          ) : currentTree?.error ? (
+                            <div className="alert alert--error" style={{ margin: 0 }}>{currentTree.error}</div>
+                          ) : (
+                            <div className="nested-tree-container">
+                              {/* 1. AD SETS SECTION */}
+                              <div>
+                                <div className="nested-section-title">
+                                  <span>📦 Ad Sets ({currentTree?.adsets?.length || 0})</span>
+                                </div>
+                                {(!currentTree?.adsets || currentTree.adsets.length === 0) ? (
+                                  <div style={{ fontSize: 12, color: 'var(--clr-text-3)', padding: '8px 0' }}>No Ad Sets found for this campaign.</div>
+                                ) : (
+                                  <div className="nested-grid">
+                                    {currentTree.adsets.map(adset => (
+                                      <div key={adset.id} className="nested-item-card">
+                                        <div>
+                                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                                            <strong style={{ fontSize: 13, color: 'var(--clr-text)' }}>{adset.name}</strong>
+                                            <StatusPill status={adset.status} />
+                                          </div>
+                                          <div style={{ fontSize: 11, color: 'var(--clr-text-3)', marginTop: 2 }}>ID: {adset.id}</div>
+                                          
+                                          <div style={{ marginTop: 8, display: 'flex', gap: 12, flexWrap: 'wrap', fontSize: 12 }}>
+                                            <div>
+                                              <span style={{ color: 'var(--clr-text-3)', fontSize: 10, display: 'block', textTransform: 'uppercase' }}>Daily Budget</span>
+                                              <strong style={{ color: 'var(--clr-primary)', fontFamily: 'monospace' }}>
+                                                {adset.daily_budget ? formatCurrency(adset.daily_budget, account.currency) + '/day' : '—'}
+                                              </strong>
+                                            </div>
+                                            {adset.optimization_goal && (
+                                              <div>
+                                                <span style={{ color: 'var(--clr-text-3)', fontSize: 10, display: 'block', textTransform: 'uppercase' }}>Optimization</span>
+                                                <span>{adset.optimization_goal}</span>
+                                              </div>
+                                            )}
+                                          </div>
+                                        </div>
+
+                                        <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', marginTop: 10, borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: 8 }}>
+                                          <button
+                                            className="btn btn--secondary btn--sm"
+                                            style={{ fontSize: 11, padding: '2px 8px' }}
+                                            onClick={() => setEditingItem({ type: 'adset', item: adset, campaignId: c.id })}
+                                          >
+                                            ✏️ Edit
+                                          </button>
+                                          <button
+                                            className="btn btn--secondary btn--sm"
+                                            style={{ fontSize: 11, padding: '2px 8px' }}
+                                            onClick={() => toggleAdSetStatus(c.id, adset)}
+                                          >
+                                            {adset.status === 'ACTIVE' ? '⏸ Pause' : '▶ Resume'}
+                                          </button>
+                                          <button
+                                            className="btn btn--danger btn--sm"
+                                            style={{ fontSize: 11, padding: '2px 8px' }}
+                                            onClick={() => handleDeleteAdSet(c.id, adset)}
+                                          >
+                                            ✕
+                                          </button>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* 2. ADS & CREATIVES SECTION */}
+                              <div>
+                                <div className="nested-section-title">
+                                  <span>🎨 Ads & Creatives ({currentTree?.ads?.length || 0})</span>
+                                </div>
+                                {(!currentTree?.ads || currentTree.ads.length === 0) ? (
+                                  <div style={{ fontSize: 12, color: 'var(--clr-text-3)', padding: '8px 0' }}>No Ads found for this campaign.</div>
+                                ) : (
+                                  <div className="nested-grid">
+                                    {currentTree.ads.map(ad => {
+                                      const cr = ad.creative || {};
+                                      const imgSrc = cr.image_url || cr.thumbnail_url;
+
+                                      return (
+                                        <div key={ad.id} className="nested-item-card">
+                                          <div>
+                                            <div style={{ display: 'flex', gap: 10 }}>
+                                              {imgSrc ? (
+                                                <a href={imgSrc} target="_blank" rel="noopener noreferrer" title="Click to view high-res creative">
+                                                  <img src={imgSrc} alt="Creative" className="nested-ad-preview-thumb" />
+                                                </a>
+                                              ) : (
+                                                <div className="nested-ad-preview-thumb" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20 }}>
+                                                  🖼️
+                                                </div>
+                                              )}
+                                              <div style={{ flex: 1, minWidth: 0 }}>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 4 }}>
+                                                  <strong style={{ fontSize: 13, color: 'var(--clr-text)', wordBreak: 'break-word' }}>{ad.name}</strong>
+                                                  <StatusPill status={ad.status} />
+                                                </div>
+                                                <div style={{ fontSize: 11, color: 'var(--clr-text-3)', marginTop: 2 }}>ID: {ad.id}</div>
+                                              </div>
+                                            </div>
+
+                                            {(cr.title || cr.body) && (
+                                              <div style={{ marginTop: 8, background: 'rgba(255,255,255,0.03)', padding: '6px 8px', borderRadius: 4 }}>
+                                                {cr.title && <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--clr-text)' }}>{cr.title}</div>}
+                                                {cr.body && (
+                                                  <div style={{ fontSize: 11, color: 'var(--clr-text-2)', marginTop: 2, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                                                    {cr.body}
+                                                  </div>
+                                                )}
+                                              </div>
+                                            )}
+
+                                            {cr.call_to_action_type && (
+                                              <div style={{ marginTop: 6, fontSize: 11, color: 'var(--clr-primary)', fontWeight: 600 }}>
+                                                CTA: {cr.call_to_action_type}
+                                              </div>
+                                            )}
+                                          </div>
+
+                                          <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', marginTop: 10, borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: 8 }}>
+                                            <button
+                                              className="btn btn--secondary btn--sm"
+                                              style={{ fontSize: 11, padding: '2px 8px' }}
+                                              onClick={() => setEditingItem({ type: 'ad', item: ad, campaignId: c.id })}
+                                            >
+                                              ✏️ Edit
+                                            </button>
+                                            <button
+                                              className="btn btn--secondary btn--sm"
+                                              style={{ fontSize: 11, padding: '2px 8px' }}
+                                              onClick={() => toggleAdStatus(c.id, ad)}
+                                            >
+                                              {ad.status === 'ACTIVE' ? '⏸ Pause' : '▶ Resume'}
+                                            </button>
+                                            <button
+                                              className="btn btn--danger btn--sm"
+                                              style={{ fontSize: 11, padding: '2px 8px' }}
+                                              onClick={() => handleDeleteAd(c.id, ad)}
+                                            >
+                                              ✕
+                                            </button>
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    )}
+
+                    {/* Inline Insights Row */}
+                    {expandedId === c.id && insights[c.id] && (
+                      <tr>
+                        <td colSpan={6} style={{ background: 'rgba(37,211,102,.04)', padding: '16px 20px' }}>
+                          {insights[c.id].totals ? (
+                            <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
+                              {[
+                                ['Impressions', formatNum(insights[c.id].totals?.impressions)],
+                                ['Clicks', formatNum(insights[c.id].totals?.clicks)],
+                                ['Spend', formatCurrency(insights[c.id].totals?.spend, account.currency)],
+                                ['Reach', formatNum(insights[c.id].totals?.reach)],
+                                ['CTR', `${(parseFloat(insights[c.id].totals?.ctr || 0) * 100).toFixed(2)}%`],
+                                ['CPC', formatCurrency(insights[c.id].totals?.cpc, account.currency)],
+                              ].map(([label, val]) => (
+                                <div key={label}>
+                                  <div style={{ fontSize: 10, color: 'var(--clr-text-3)', fontWeight: 700, textTransform: 'uppercase' }}>{label}</div>
+                                  <div style={{ fontSize: 18, fontWeight: 900, color: 'var(--clr-text)', fontFamily: 'var(--font-display)' }}>{val}</div>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <span style={{ color: 'var(--clr-text-3)', fontSize: 12 }}>No insights data for this campaign yet.</span>
+                          )}
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
+                );
+              })}
             </tbody>
           </table>
         </div>
       )}
+
+      {/* Edit Entity Modal */}
+      {editingItem && (
+        <EditEntityModal
+          target={editingItem}
+          currency={account.currency}
+          onClose={() => setEditingItem(null)}
+          onSaved={() => {
+            setEditingItem(null);
+            load();
+            if (editingItem.campaignId) {
+              loadTree(editingItem.campaignId);
+            }
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  MODAL: EDIT ENTITY (Campaign, AdSet, Ad)
+// ═══════════════════════════════════════════════════════════════
+
+function EditEntityModal({ target, currency, onClose, onSaved }) {
+  const { type, item } = target;
+  const [name, setName] = useState(item.name || '');
+  const [status, setStatus] = useState(item.status || 'ACTIVE');
+  const [budget, setBudget] = useState(
+    type === 'adset' && item.daily_budget
+      ? (parseInt(item.daily_budget) / 100).toString()
+      : type === 'campaign' && item.daily_budget
+      ? (parseInt(item.daily_budget) / 100).toString()
+      : ''
+  );
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  async function handleSave(e) {
+    e.preventDefault();
+    if (!name.trim()) { setError('Name is required'); return; }
+    setSaving(true); setError('');
+
+    try {
+      if (type === 'campaign') {
+        const payload = { name: name.trim(), status };
+        if (budget) payload.daily_budget = Math.round(parseFloat(budget) * 100);
+        await updateCampaign(item.id, payload);
+      } else if (type === 'adset') {
+        const payload = { name: name.trim(), status };
+        if (budget) payload.daily_budget = budget;
+        await updateAdSet(item.id, payload);
+      } else if (type === 'ad') {
+        await updateAd(item.id, { name: name.trim(), status });
+      }
+      onSaved();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="modal-box" style={{ maxWidth: 440 }}>
+        <div className="modal-title">
+          ✏️ Edit {type === 'campaign' ? 'Campaign' : type === 'adset' ? 'Ad Set' : 'Ad'}
+        </div>
+        <div style={{ fontSize: 11, color: 'var(--clr-text-3)', marginTop: -14, marginBottom: 16 }}>
+          ID: {item.id}
+        </div>
+
+        {error && <div className="alert alert--error">{error}</div>}
+
+        <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div className="form-group">
+            <label className="form-label">Name</label>
+            <input
+              className="form-input"
+              value={name}
+              onChange={e => setName(e.target.value)}
+              required
+            />
+          </div>
+
+          {(type === 'adset' || (type === 'campaign' && item.budget_type === 'daily')) && (
+            <div className="form-group">
+              <label className="form-label">Daily Budget ({currency || 'INR'})</label>
+              <input
+                className="form-input"
+                type="number"
+                step="1"
+                min="50"
+                placeholder="e.g. 500"
+                value={budget}
+                onChange={e => setBudget(e.target.value)}
+              />
+              <span style={{ fontSize: 10, color: 'var(--clr-text-3)' }}>
+                Updates daily budget directly on Meta
+              </span>
+            </div>
+          )}
+
+          <div className="form-group">
+            <label className="form-label">Status</label>
+            <select className="form-input" value={status} onChange={e => setStatus(e.target.value)}>
+              <option value="ACTIVE">🟢 Active</option>
+              <option value="PAUSED">⏸ Paused</option>
+            </select>
+          </div>
+
+          <div className="modal-footer" style={{ marginTop: 12 }}>
+            <button type="button" className="btn btn--ghost" onClick={onClose}>
+              Cancel
+            </button>
+            <button type="submit" className="btn btn--primary" disabled={saving}>
+              {saving ? 'Saving...' : '💾 Save Changes'}
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }

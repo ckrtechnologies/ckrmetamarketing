@@ -185,6 +185,61 @@
 .objective-card__name { font-size: 13px; font-weight: 700; color: var(--clr-text); margin-bottom: 4px; }
 .objective-card__desc { font-size: 11px; color: var(--clr-text-3); line-height: 1.4; }
 
+/* ── Nested Ad Sets & Ads Hierarchy ──────────────────────────── */
+.nested-tree-container {
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--clr-border);
+  border-radius: var(--radius-md);
+  padding: 18px 20px;
+  margin: 8px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.nested-section-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--clr-text);
+  margin-bottom: 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  padding-bottom: 6px;
+}
+
+.nested-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+}
+
+.nested-item-card {
+  background: var(--clr-surface);
+  border: 1px solid var(--clr-border);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 8px;
+  transition: border-color 0.15s;
+}
+.nested-item-card:hover {
+  border-color: var(--clr-primary-bd);
+}
+
+.nested-ad-preview-thumb {
+  width: 54px;
+  height: 54px;
+  border-radius: var(--radius-sm);
+  object-fit: cover;
+  border: 1px solid var(--clr-border);
+  background: #000;
+  flex-shrink: 0;
+}
+
 /* ── WhatsApp Ad Preview ─────────────────────────────────────── */
 .wa-ad-preview {
   background: #e5ddd5;

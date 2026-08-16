@@ -27,9 +27,14 @@ router.post('/publish',                     authenticate, ctrl.publishCampaign);
 // ── Ad Sets ──────────────────────────────────────────────────────
 router.get('/adsets',            authenticate, ctrl.listAdSets);
 router.post('/adsets',           authenticate, ctrl.createAdSet);
+router.patch('/adsets/:id',      authenticate, ctrl.updateAdSet);
+router.delete('/adsets/:id',     authenticate, ctrl.deleteAdSet);
 
 // ── Ads ──────────────────────────────────────────────────────────
 router.get('/ads',               authenticate, ctrl.listAds);
+router.patch('/ads/:id',         authenticate, ctrl.updateAd);
+router.delete('/ads/:id',        authenticate, ctrl.deleteAd);
+
 
 // ── Insights Dashboard ────────────────────────────────────────────
 router.get('/insights',          authenticate, ctrl.getAccountInsights);

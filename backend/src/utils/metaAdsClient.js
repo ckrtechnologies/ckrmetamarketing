@@ -174,6 +174,17 @@ async function createAdSet(accessToken, actId, {
   return r.data;
 }
 
+async function updateAdSet(accessToken, adsetId, updates) {
+  const r = await client(accessToken).post(`/${adsetId}`, updates);
+  return r.data;
+}
+
+async function deleteAdSet(accessToken, adsetId) {
+  const r = await client(accessToken).delete(`/${adsetId}`);
+  return r.data;
+}
+
+
 // ── Ad Creatives ──────────────────────────────────────────────
 
 async function listCreatives(accessToken, actId) {
@@ -436,7 +447,7 @@ async function uploadImage(accessToken, actId, imageBase64) {
 module.exports = {
   getAdAccounts, getAdAccount,
   listCampaigns, createCampaign, updateCampaign, deleteCampaign,
-  listAdSets, createAdSet,
+  listAdSets, createAdSet, updateAdSet, deleteAdSet,
   listCreatives, createCreative,
   listAds, createAd, updateAd, deleteAd,
   getCampaignInsights, getAccountInsights,
