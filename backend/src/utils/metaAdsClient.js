@@ -50,15 +50,22 @@ async function listCampaigns(accessToken, actId) {
   });
   const list = r.data?.data || [];
 
-  // If campaign-level budget is empty, derive from adsets
+  // If campaign-level budget is empty, derive from active adsets
   return list.map(c => {
     let daily_budget = c.daily_budget ? parseInt(c.daily_budget) : null;
     let lifetime_budget = c.lifetime_budget ? parseInt(c.lifetime_budget) : null;
 
     if (!daily_budget && !lifetime_budget && c.adsets?.data?.length) {
-      const activeAdsets = c.adsets.data.filter(a => a.status !== 'DELETED' && a.status !== 'ARCHIVED');
-      const adsetDaily = activeAdsets.reduce((sum, a) => sum + (parseInt(a.daily_budget) || 0), 0);
-      const adsetLifetime = activeAdsets.reduce((sum, a) => sum + (parseInt(a.lifetime_budget) || 0), 0);
+      // 1. Only sum ACTIVE adsets that are currently live / scheduled to run
+      const activeAdsets = c.adsets.data.filter(a => a.status === 'ACTIVE');
+      
+      // 2. If all adsets are paused (e.g. paused campaign), take non-deleted adsets or the latest adset
+      const targetAdsets = activeAdsets.length > 0
+        ? activeAdsets
+        : c.adsets.data.filter(a => a.status !== 'DELETED' && a.status !== 'ARCHIVED');
+
+      const adsetDaily = targetAdsets.reduce((sum, a) => sum + (parseInt(a.daily_budget) || 0), 0);
+      const adsetLifetime = targetAdsets.reduce((sum, a) => sum + (parseInt(a.lifetime_budget) || 0), 0);
       if (adsetDaily > 0) daily_budget = adsetDaily;
       if (adsetLifetime > 0) lifetime_budget = adsetLifetime;
     }
