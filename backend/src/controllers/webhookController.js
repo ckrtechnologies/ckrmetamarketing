@@ -1,6 +1,9 @@
 const { updateRecipientByWamid, logDelivery } = require('../repositories/campaignRepo');
 const { upsertConversation, addMessage, updateMessageStatus } = require('../repositories/chatRepo');
 const orgRepo = require('../repositories/orgRepo');
+const { getMediaUrl, downloadMediaData } = require('../utils/metaClient');
+const fs = require('fs');
+const path = require('path');
 
 const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN || 'ckrmetamarketing_verify_token';
 
@@ -33,7 +36,7 @@ async function receive(req, res) {
 
         if (value.messages?.length) {
           for (const msg of value.messages) {
-            await handleInboundMessage(value, msg).catch(err =>
+            await handleInboundMessage(value, msg, req).catch(err =>
               console.error('[webhook:inbound error]', err.message)
             );
           }
@@ -41,7 +44,7 @@ async function receive(req, res) {
 
         if (value.statuses?.length) {
           for (const status of value.statuses) {
-            await handleStatusUpdate(status).catch(err =>
+            await handleStatusUpdate(status, req).catch(err =>
               console.error('[webhook:status error]', err.message)
             );
           }
@@ -54,7 +57,7 @@ async function receive(req, res) {
 }
 
 // ── Inbound Message Handler ───────────────────────────────────
-async function handleInboundMessage(value, msg) {
+async function handleInboundMessage(value, msg, req) {
   const from        = msg.from;  // customer phone
   const wabaPhoneId = value.metadata?.phone_number_id;
   const wabaId      = value.metadata?.display_phone_number;
@@ -81,17 +84,16 @@ async function handleInboundMessage(value, msg) {
   if (wabaPhoneId) {
     const { data } = await orgRepo.supabasePublic()
       .from('waba_accounts')
-      .select('id, org_id')
+      .select('id, org_id, access_token')
       .eq('phone_number_id', String(wabaPhoneId))
       .maybeSingle();
     wabaRow = data;
   }
 
-  // Fallback: If not matched by phone_number_id, match by active WABA or first WABA in DB
   if (!wabaRow) {
     const { data: fallbackWaba } = await orgRepo.supabasePublic()
       .from('waba_accounts')
-      .select('id, org_id')
+      .select('id, org_id, access_token')
       .order('is_active', { ascending: false })
       .limit(1)
       .maybeSingle();
@@ -103,7 +105,41 @@ async function handleInboundMessage(value, msg) {
     return;
   }
 
-  const { id: wabaDbId, org_id } = wabaRow;
+  const { id: wabaDbId, org_id, access_token } = wabaRow;
+
+  // Process media if present
+  let mediaObj = msg.image || msg.document || msg.video || msg.audio || msg.sticker;
+  if (mediaObj && mediaObj.id && access_token) {
+    try {
+      const mediaRes = await getMediaUrl(mediaObj.id, access_token);
+      if (mediaRes.success && mediaRes.data.url) {
+        const url = mediaRes.data.url;
+        const mimeType = mediaRes.data.mime_type || '';
+        let ext = mimeType.split('/')[1]?.split(';')[0] || 'bin';
+        if (ext === 'jpeg') ext = 'jpg';
+        
+        const dlRes = await downloadMediaData(url, access_token);
+        if (dlRes.success) {
+          const pubDir = process.env.PUBLIC_DIR || path.join(__dirname, '../../public');
+          const orgDir = path.join(pubDir, org_id, 'chat');
+          if (!fs.existsSync(orgDir)) fs.mkdirSync(orgDir, { recursive: true });
+          
+          const filename = `${mediaObj.id}.${ext}`;
+          const filepath = path.join(orgDir, filename);
+          fs.writeFileSync(filepath, Buffer.from(dlRes.data));
+          
+          const cdnBase = process.env.CDN_BASE_URL || 'http://localhost:5001/public';
+          const mediaLink = `${cdnBase}/${org_id}/chat/${filename}`;
+          
+          const caption = mediaObj.caption || mediaObj.filename || '';
+          body = `[${msgType.charAt(0).toUpperCase() + msgType.slice(1)}: ${caption} | URL: ${mediaLink}]`;
+          console.log(`[webhook:media] Downloaded to ${filepath}`);
+        }
+      }
+    } catch (e) {
+      console.error('[webhook:media error]', e.message);
+    }
+  }
 
   // Calculate 24h reply window from this message
   const windowExpires = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
@@ -150,7 +186,7 @@ async function handleInboundMessage(value, msg) {
   });
 
   // Save inbound message
-  await addMessage({
+  const savedMsg = await addMessage({
     conversation_id: conv.id,
     direction: 'inbound',
     type: msgType,
@@ -159,11 +195,19 @@ async function handleInboundMessage(value, msg) {
     status: 'delivered',
   });
 
+  const io = req.app.get('io');
+  if (io) {
+    io.to(org_id).emit('new_message', {
+      conversation_id: conv.id,
+      message: savedMsg,
+      conversation: conv
+    });
+  }
 }
 
 // ── Delivery Status Handler ───────────────────────────────────
-async function handleStatusUpdate(status) {
-  const { id: wamid, status: newStatus, timestamp, errors } = status;
+async function handleStatusUpdate(statusObj, req) {
+  const { id: wamid, status: newStatus, timestamp, errors } = statusObj;
   const error_code = errors?.[0]?.code ? String(errors[0].code) : null;
   const error_msg  = errors?.[0]?.title || null;
   const ts         = new Date(parseInt(timestamp) * 1000).toISOString();
@@ -185,6 +229,15 @@ async function handleStatusUpdate(status) {
 
   // Chat message status update
   await updateMessageStatus(wamid, newStatus);
+
+  const io = req.app.get('io');
+  if (io) {
+    io.emit('message_status', {
+      wamid,
+      status: newStatus,
+      timestamp: ts
+    });
+  }
 }
 
 module.exports = { verify, receive };

@@ -69,4 +69,47 @@ async function getTemplates(wabaId, accessToken) {
   return metaCall('GET', `/${wabaId}/message_templates?limit=100&fields=id,name,status,language,components`, accessToken);
 }
 
-module.exports = { metaCall, sendTemplate, sendText, getTemplates };
+/**
+ * Send a media message (image, document, video) via Meta Cloud API using a public URL
+ */
+async function sendMedia(phoneNumberId, accessToken, to, type, mediaUrl, caption, filename) {
+  const payload = {
+    messaging_product: 'whatsapp',
+    to,
+    type,
+    [type]: { link: mediaUrl }
+  };
+  if (caption && (type === 'image' || type === 'video' || type === 'document')) {
+    payload[type].caption = caption;
+  }
+  if (filename && type === 'document') {
+    payload[type].filename = filename;
+  }
+  return metaCall('POST', `/${phoneNumberId}/messages`, accessToken, payload);
+}
+
+/**
+ * Get media URL by media ID
+ */
+async function getMediaUrl(mediaId, accessToken) {
+  return metaCall('GET', `/${mediaId}`, accessToken);
+}
+
+/**
+ * Download media binary data from Meta URL
+ */
+async function downloadMediaData(url, accessToken) {
+  try {
+    const response = await axios({
+      method: 'GET',
+      url,
+      headers: { Authorization: `Bearer ${accessToken}` },
+      responseType: 'arraybuffer'
+    });
+    return { success: true, data: response.data };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+}
+
+module.exports = { metaCall, sendTemplate, sendText, getTemplates, sendMedia, getMediaUrl, downloadMediaData };

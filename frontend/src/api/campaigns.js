@@ -8,4 +8,4 @@ export const deleteCampaign  = (id)           => apiCall('DELETE', `/v2/campaign
 export const launchCampaign  = (id)           => apiCall('POST',   `/v2/campaigns/${id}/launch`);
 export const pauseCampaign   = (id)           => apiCall('POST',   `/v2/campaigns/${id}/pause`);
 export const getCampaignReport = (id, params = {}) => apiCall('GET', `/v2/campaigns/${id}/report?` + new URLSearchParams(params).toString());
-export const exportCampaignCSV = (id)         => `/api/v2/campaigns/${id}/export`;
+export const exportCampaignCSV = (id)         => `${import.meta.env.VITE_API_URL || '/api'}/v2/campaigns/${id}/export`;

@@ -8,12 +8,14 @@ export default function CampaignReport({ campaignId, onBack }) {
 
   useEffect(() => {
     load();
-    // Only keep polling if campaign is still running
     const t = setInterval(() => {
-      if (data?.campaign?.status === 'running') load();
-    }, 10000); // 10s — only refreshes for in-flight campaigns
+      // Re-fetch always, or use a ref. Since we want live updates, just fetch.
+      // The backend handles it quickly. If the campaign is done, we could clear it,
+      // but for now, just fetch unconditionally every 10s to ensure fresh data.
+      load();
+    }, 10000);
     return () => clearInterval(t);
-  }, []);
+  }, [campaignId]);
 
   async function load() {
     try {
@@ -26,8 +28,8 @@ export default function CampaignReport({ campaignId, onBack }) {
   if (loading) return <div className="loading-center"><div className="spinner" /></div>;
   if (!data) return <div className="alert alert--error">Failed to load report</div>;
 
-  const { campaign, stats, recipients } = data;
-  const filtered = filter ? recipients.filter(r => r.status === filter) : recipients;
+  const { campaign, stats, recipients = [] } = data;
+  const filtered = filter ? recipients.filter(r => (r.status || '').toLowerCase() === filter.toLowerCase()) : recipients;
   const deliveryPct = stats.total > 0 ? Math.round((stats.delivered / stats.total) * 100) : 0;
   const readPct     = stats.total > 0 ? Math.round((stats.read / stats.total) * 100) : 0;
 
@@ -85,20 +87,28 @@ export default function CampaignReport({ campaignId, onBack }) {
             <tr><th>Phone</th><th>Status</th><th>Sent</th><th>Delivered</th><th>Read</th><th>Error</th></tr>
           </thead>
           <tbody>
-            {filtered.slice(0, 200).map(r => (
-              <tr key={r.id}>
-                <td style={{ fontFamily: 'monospace', fontSize: 12 }}>+{r.phone}</td>
-                <td>
-                  <span className={`badge ${r.status === 'delivered' || r.status === 'read' ? 'badge--green' : r.status === 'failed' ? 'badge--red' : r.status === 'sent' ? 'badge--blue' : 'badge--gray'}`}>
-                    {r.status}
-                  </span>
+            {filtered.length === 0 ? (
+              <tr>
+                <td colSpan="6" style={{ textAlign: 'center', padding: '30px 16px', color: 'var(--clr-text-3)' }}>
+                  No recipients match this filter.
                 </td>
-                <td style={{ fontSize: 12, color: 'var(--clr-text-3)' }}>{fmt(r.sent_at)}</td>
-                <td style={{ fontSize: 12, color: 'var(--clr-text-3)' }}>{fmt(r.delivered_at)}</td>
-                <td style={{ fontSize: 12, color: 'var(--clr-text-3)' }}>{fmt(r.read_at)}</td>
-                <td style={{ fontSize: 11, color: 'var(--clr-danger)' }}>{r.error_msg || ''}</td>
               </tr>
-            ))}
+            ) : (
+              filtered.slice(0, 200).map(r => (
+                <tr key={r.id}>
+                  <td style={{ fontFamily: 'monospace', fontSize: 12 }}>+{r.phone}</td>
+                  <td>
+                    <span className={`badge ${r.status === 'delivered' || r.status === 'read' ? 'badge--green' : r.status === 'failed' ? 'badge--red' : r.status === 'sent' ? 'badge--blue' : 'badge--gray'}`}>
+                      {r.status}
+                    </span>
+                  </td>
+                  <td style={{ fontSize: 12, color: 'var(--clr-text-3)' }}>{fmt(r.sent_at)}</td>
+                  <td style={{ fontSize: 12, color: 'var(--clr-text-3)' }}>{fmt(r.delivered_at)}</td>
+                  <td style={{ fontSize: 12, color: 'var(--clr-text-3)' }}>{fmt(r.read_at)}</td>
+                  <td style={{ fontSize: 11, color: 'var(--clr-danger)' }}>{r.error_msg || ''}</td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
         {filtered.length > 200 && <div style={{ padding: '10px 16px', fontSize: 12, color: 'var(--clr-text-3)' }}>Showing 200 of {filtered.length} — export CSV for full list</div>}

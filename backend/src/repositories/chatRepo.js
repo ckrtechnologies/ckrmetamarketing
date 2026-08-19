@@ -20,6 +20,7 @@ async function upsertConversation({ org_id, waba_id, customer_phone, customer_na
         unread_count: (existing.unread_count || 0) + 1,
         window_expires,
         status: 'open',
+        waba_id,
         ...(customer_name ? { customer_name } : {}),
       })
       .eq('id', existing.id)

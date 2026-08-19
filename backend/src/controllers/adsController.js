@@ -788,93 +788,105 @@ async function publishCampaign(req, res) {
     }
 
 
-    // Step 1: Create Campaign shell
-    const campaignResult = await metaAds.createCampaign(account.access_token, account.act_id, {
-      name: campaign_name,
-      objective,
-      status,
-      special_ad_categories: [],
-    });
+    let campaignResult = null;
+    try {
+      // Step 1: Create Campaign shell
+      campaignResult = await metaAds.createCampaign(account.access_token, account.act_id, {
+        name: campaign_name,
+        objective,
+        status,
+        special_ad_categories: [],
+      });
 
-
-    // Step 2: Upload image (user provided or default banner)
-    let image_hash = null;
-    let finalImageBase64 = image_base64;
-    if (!finalImageBase64) {
-      const fs = require('fs');
-      const path = require('path');
-      const bannerPath = path.join(__dirname, '../utils/defaultBanner.png');
-      if (fs.existsSync(bannerPath)) {
-        finalImageBase64 = fs.readFileSync(bannerPath).toString('base64');
+      // Step 2: Upload image (user provided or default banner)
+      let image_hash = null;
+      let finalImageBase64 = image_base64;
+      if (!finalImageBase64) {
+        const fs = require('fs');
+        const path = require('path');
+        const bannerPath = path.join(__dirname, '../utils/defaultBanner.png');
+        if (fs.existsSync(bannerPath)) {
+          finalImageBase64 = fs.readFileSync(bannerPath).toString('base64');
+        }
       }
+
+      if (finalImageBase64) {
+        const imgResult = await metaAds.uploadImage(account.access_token, account.act_id, finalImageBase64);
+        image_hash = imgResult?.hash;
+      }
+
+      // Step 3: Create Creative
+      const creativeResult = await metaAds.createCreative(account.access_token, account.act_id, {
+        name:                 `${campaign_name} — Creative`,
+        page_id,
+        headline,
+        body,
+        description,
+        image_hash,
+        call_to_action_type,
+        whatsapp_number:      whatsappNumber,
+        link_url,
+      });
+
+      // Step 4: Create Ad Set
+      const adsetResult = await metaAds.createAdSet(account.access_token, account.act_id, {
+        name:                  adset_name || `${campaign_name} — Ad Set`,
+        campaign_id:           campaignResult.id,
+        daily_budget:          daily_budget    ? budgetToPaise(daily_budget)    : undefined,
+        lifetime_budget:       lifetime_budget ? budgetToPaise(lifetime_budget) : undefined,
+        optimization_goal:     'CONVERSATIONS',
+        destination_type:      'WHATSAPP',
+        targeting,
+        start_time,
+        end_time,
+        status,
+        page_id,
+        whatsapp_phone_number: whatsappNumber,
+      });
+
+      // Step 5: Create Ad
+      const adResult = await metaAds.createAd(account.access_token, account.act_id, {
+        name:        `${campaign_name} — Ad`,
+        adset_id:    adsetResult.id,
+        creative_id: creativeResult.id,
+        status,
+      });
+
+      // Save campaign to Supabase
+      await adsRepo.upsertAdCampaign(req.orgId, {
+        ad_account_id:    account.id,
+        meta_campaign_id: campaignResult.id,
+        name:             campaign_name,
+        objective,
+        status,
+        daily_budget:    daily_budget    ? budgetToPaise(daily_budget)    : null,
+        lifetime_budget: lifetime_budget ? budgetToPaise(lifetime_budget) : null,
+        start_time:      start_time || null,
+        end_time:        end_time   || null,
+      });
+
+      res.status(201).json({
+        success: true,
+        campaign_id:  campaignResult.id,
+        adset_id:     adsetResult.id,
+        creative_id:  creativeResult.id,
+        ad_id:        adResult.id,
+        status,
+      });
+    } catch (stepErr) {
+      if (campaignResult?.id) {
+        try {
+          await metaAds.deleteCampaign(account.access_token, campaignResult.id);
+          console.warn(`[publishCampaign] Rolled back orphaned campaign ${campaignResult.id} due to publish failure.`);
+        } catch (cleanupErr) {
+          console.error(`[publishCampaign] Failed to clean up campaign ${campaignResult.id}:`, cleanupErr.message);
+        }
+      }
+      throw stepErr;
     }
-
-    if (finalImageBase64) {
-      const imgResult = await metaAds.uploadImage(account.access_token, account.act_id, finalImageBase64);
-      image_hash = imgResult?.hash;
-    }
-
-
-    // Step 3: Create Creative
-    const creativeResult = await metaAds.createCreative(account.access_token, account.act_id, {
-      name:                 `${campaign_name} — Creative`,
-      page_id,
-      headline,
-      body,
-      description,
-      image_hash,
-      call_to_action_type,
-      whatsapp_number:      whatsappNumber,
-      link_url,
-    });
-
-    // Step 4: Create Ad Set
-    const adsetResult = await metaAds.createAdSet(account.access_token, account.act_id, {
-      name:                  adset_name || `${campaign_name} — Ad Set`,
-      campaign_id:           campaignResult.id,
-      daily_budget:          daily_budget    ? budgetToPaise(daily_budget)    : undefined,
-      lifetime_budget:       lifetime_budget ? budgetToPaise(lifetime_budget) : undefined,
-      optimization_goal:     'CONVERSATIONS',
-      destination_type:      'WHATSAPP',
-      targeting,
-      start_time,
-      end_time,
-      status,
-      page_id,
-      whatsapp_phone_number: whatsappNumber,
-    });
-
-    // Step 5: Create Ad
-    const adResult = await metaAds.createAd(account.access_token, account.act_id, {
-      name:        `${campaign_name} — Ad`,
-      adset_id:    adsetResult.id,
-      creative_id: creativeResult.id,
-      status,
-    });
-
-    // Save campaign to Supabase
-    await adsRepo.upsertAdCampaign(req.orgId, {
-      ad_account_id:    account.id,
-      meta_campaign_id: campaignResult.id,
-      name:             campaign_name,
-      objective,
-      status,
-      daily_budget:    daily_budget    ? budgetToPaise(daily_budget)    : null,
-      lifetime_budget: lifetime_budget ? budgetToPaise(lifetime_budget) : null,
-      start_time:      start_time || null,
-      end_time:        end_time   || null,
-    });
-
-    res.status(201).json({
-      success: true,
-      campaign_id:  campaignResult.id,
-      adset_id:     adsetResult.id,
-      creative_id:  creativeResult.id,
-      ad_id:        adResult.id,
-      status,
-    });
   } catch (err) {
-    const detail = err.response?.data?.error?.message || err.message;
+    const errorObj = err.response?.data?.error;
+    const detail = errorObj?.error_user_msg || errorObj?.message || err.message;
     console.error('[publishCampaign]', detail, err.response?.data);
     res.status(400).json({ error: detail });
   }

@@ -1,18 +1,23 @@
-const API_BASE = '/api';
+const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
 function getToken() { return localStorage.getItem('ckr_token'); }
 function setToken(t) { localStorage.setItem('ckr_token', t); }
 function clearToken() { localStorage.removeItem('ckr_token'); }
 
 async function apiCall(method, path, body = null) {
-  const headers = { 'Content-Type': 'application/json' };
+  const headers = {};
+  const isFormData = body instanceof FormData;
+  if (!isFormData) {
+    headers['Content-Type'] = 'application/json';
+  }
+
   const token = getToken();
   if (token) headers['Authorization'] = `Bearer ${token}`;
 
   const res = await fetch(`${API_BASE}${path}`, {
     method,
     headers,
-    body: body ? JSON.stringify(body) : null,
+    body: body ? (isFormData ? body : JSON.stringify(body)) : null,
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);

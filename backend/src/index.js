@@ -5,6 +5,8 @@ const morgan     = require('morgan');
 const path       = require('path');
 const fs         = require('fs');
 const rateLimit  = require('express-rate-limit');
+const http       = require('http');
+const { Server } = require('socket.io');
 
 const authRoutes    = require('./routes/auth');
 const wabaRoutes    = require('./routes/waba');
@@ -14,8 +16,21 @@ const campaignRoutes = require('./routes/campaigns');
 const chatRoutes      = require('./routes/chat');
 const analyticsRoutes = require('./routes/analytics');
 const adsRoutes       = require('./routes/ads');
+const mediaRoutes     = require('./routes/media');
 
 const app  = express();
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: { origin: '*', methods: ['GET', 'POST'] }
+});
+io.on('connection', (socket) => {
+  socket.on('join_org', (orgId) => {
+    socket.join(orgId);
+    console.log(`[socket] Client joined org: ${orgId}`);
+  });
+});
+app.set('io', io);
+
 const PORT = process.env.PORT || 5001;
 
 // ── Ensure uploads dir exists ──────────────────────────────────────
@@ -27,16 +42,15 @@ morgan.token('org-id', (req) => req.orgId ? `[Org: ${req.orgId}]` : '[No Org]');
 app.use(morgan(':method :url :status :response-time ms - :res[content-length] :org-id'));
 
 // ── CORS ───────────────────────────────────────────────────────────
-const allowedOrigins = (process.env.ALLOWED_ORIGINS || 'http://localhost:5173').split(',');
 app.use(cors({
-  origin: allowedOrigins,
+  origin: '*',
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
 }));
 
 // ── Body parsing ───────────────────────────────────────────────────
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '25mb' }));
+app.use(express.urlencoded({ extended: true, limit: '25mb' }));
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 // ── Global rate limiter ────────────────────────────────────────────
@@ -59,6 +73,7 @@ app.use('/api/v2/campaigns', campaignRoutes);
 app.use('/api/v2/chat',       chatRoutes);
 app.use('/api/v2/analytics',  analyticsRoutes);
 app.use('/api/v2/ads',         adsRoutes);
+app.use('/api/v2/media',       mediaRoutes);
 
 // ── Health check ───────────────────────────────────────────────────
 app.get('/api/health', (req, res) => {
@@ -82,11 +97,12 @@ app.use((err, req, res, next) => {
 });
 
 // ── Start ──────────────────────────────────────────────────────────
-app.listen(PORT, () => {
+server.listen(PORT, () => {
   console.log('\n🚀 CKR Meta Marketing API');
   console.log(`   Listening on : http://localhost:${PORT}`);
   console.log(`   Environment  : ${process.env.NODE_ENV || 'development'}`);
   console.log(`   Supabase     : ${process.env.SUPABASE_URL ? '✅ Connected' : '⚠️  NOT SET'}`);
   console.log(`   Meta App     : ${process.env.META_APP_ID ? '✅ SET' : '⚠️  NOT SET'}`);
-  console.log(`   Verify Token : ${process.env.WHATSAPP_VERIFY_TOKEN || '⚠️  using default'}\n`);
+  console.log(`   Verify Token : ${process.env.WHATSAPP_VERIFY_TOKEN || '⚠️  using default'}`);
+  console.log(`   Socket.io    : ✅ Enabled\n`);
 });

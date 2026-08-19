@@ -131,8 +131,32 @@ async function launchCampaign(req, res) {
         // Build components from variables
         const components = [];
         if (recipient.variables && Object.keys(recipient.variables).length > 0) {
-          const params = Object.values(recipient.variables).map(v => ({ type: 'text', text: String(v) }));
-          components.push({ type: 'body', parameters: params });
+          const bodyVars = Object.keys(recipient.variables)
+                                 .filter(k => k !== 'header_link')
+                                 .sort((a, b) => Number(a) - Number(b))
+                                 .map(k => recipient.variables[k]);
+          
+          if (bodyVars.length > 0) {
+            const params = bodyVars.map(v => ({ type: 'text', text: String(v) }));
+            components.push({ type: 'body', parameters: params });
+          }
+
+          if (recipient.variables.header_link) {
+            const link = recipient.variables.header_link;
+            let type = 'document';
+            if (link.match(/\.(jpg|jpeg|png|gif|webp)$/i)) type = 'image';
+            else if (link.match(/\.(mp4|3gp|mov)$/i)) type = 'video';
+            
+            components.push({
+              type: 'header',
+              parameters: [
+                {
+                  type,
+                  [type]: { link }
+                }
+              ]
+            });
+          }
         }
 
         const result = await sendTemplate(

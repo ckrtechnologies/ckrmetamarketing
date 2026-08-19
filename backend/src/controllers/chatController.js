@@ -1,6 +1,8 @@
 const chatRepo = require('../repositories/chatRepo');
 const orgRepo  = require('../repositories/orgRepo');
-const { sendText, sendTemplate } = require('../utils/metaClient');
+const { sendText, sendTemplate, sendMedia } = require('../utils/metaClient');
+const fs = require('fs');
+const path = require('path');
 
 // ── Conversations ─────────────────────────────────────────────
 
@@ -108,6 +110,86 @@ async function sendReply(req, res) {
     res.json({ message: msg, wamid });
   } catch (err) {
     console.error('[sendReply]', err);
+    res.status(500).json({ error: err.message });
+  }
+}
+
+// POST /api/v2/chat/conversations/:id/send-media
+async function sendMediaReply(req, res) {
+  try {
+    const file = req.file;
+    const { caption } = req.body;
+    if (!file) return res.status(400).json({ error: 'No file uploaded' });
+
+    const conv = await chatRepo.getConversationById(req.orgId, req.params.id);
+    const windowExpires = conv.window_expires ? new Date(conv.window_expires) : null;
+    const now = new Date();
+    if (windowExpires && now > windowExpires) {
+      return res.status(400).json({ error: 'Customer service window expired (24h).', window_expired: true });
+    }
+
+    const wabaAccounts = await orgRepo.getWabaAccounts(req.orgId);
+    const convWaba = conv.waba_id
+      ? wabaAccounts.find(a => a.id === conv.waba_id) || wabaAccounts[0]
+      : wabaAccounts[0];
+    if (!convWaba) return res.status(404).json({ error: 'WABA not found for this conversation' });
+
+    // Save file locally to CDN public dir
+    const pubDir = process.env.PUBLIC_DIR || path.join(__dirname, '../../public');
+    const orgDir = path.join(pubDir, req.orgId, 'chat');
+    if (!fs.existsSync(orgDir)) fs.mkdirSync(orgDir, { recursive: true });
+
+    // Sanitize filename to avoid spaces and special chars
+    const safeName = file.originalname.replace(/[^a-zA-Z0-9.-]/g, '_');
+    const filename = `${Date.now()}_${safeName}`;
+    const filepath = path.join(orgDir, filename);
+    fs.writeFileSync(filepath, file.buffer);
+
+    const cdnBase = process.env.CDN_BASE_URL || 'http://localhost:5001/public';
+    const mediaLink = `${cdnBase}/${req.orgId}/chat/${filename}`;
+
+    // Determine type
+    let type = 'document';
+    if (file.mimetype.startsWith('image/')) type = 'image';
+    if (file.mimetype.startsWith('video/')) type = 'video';
+    if (file.mimetype.startsWith('audio/')) type = 'audio';
+
+    const result = await sendMedia(
+      convWaba.phone_number_id,
+      convWaba.access_token,
+      conv.customer_phone,
+      type,
+      mediaLink,
+      caption,
+      type === 'document' ? safeName : undefined
+    );
+
+    if (!result.success) {
+      return res.status(400).json({ error: result.error || 'Failed to send media', detail: result.raw });
+    }
+
+    const wamid = result.data?.messages?.[0]?.id;
+    const bodyStr = `[${type.charAt(0).toUpperCase() + type.slice(1)}: ${caption || safeName} | URL: ${mediaLink}]`;
+
+    const msg = await chatRepo.addMessage({
+      conversation_id: conv.id,
+      direction: 'outbound',
+      type,
+      body: bodyStr,
+      wamid,
+      status: 'sent',
+    });
+
+    await chatRepo.upsertConversation({
+      org_id: req.orgId,
+      waba_id: convWaba.id,
+      customer_phone: conv.customer_phone,
+      last_message: `You: ${bodyStr.substring(0, 60)}`,
+    });
+
+    res.json({ message: msg, wamid, mediaLink });
+  } catch (err) {
+    console.error('[sendMediaReply]', err);
     res.status(500).json({ error: err.message });
   }
 }
@@ -220,5 +302,5 @@ async function pollMessages(req, res) {
 
 module.exports = {
   listConversations, getConversation, closeConversation, assignConversation,
-  getMessages, sendReply, sendTemplateInChat, startConversation, getUnreadCount, pollMessages,
+  getMessages, sendReply, sendMediaReply, sendTemplateInChat, startConversation, getUnreadCount, pollMessages,
 };

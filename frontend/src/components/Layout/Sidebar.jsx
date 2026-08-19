@@ -10,6 +10,7 @@ const NAV_ITEMS = [
   { path: '/contacts',   icon: '👥', label: 'Contacts' },
   { path: '/chat',       icon: '💬', label: 'Live Chat', badge: true },
   { path: '/ads',        icon: '🎯', label: 'Ads Manager' },
+  { path: '/media',      icon: '📁', label: 'Documents' },
   { path: '/reports',    icon: '📈', label: 'Reports' },
   { path: '/waba',       icon: '📱', label: 'WA Numbers' },
   { path: '/settings',   icon: '⚙️',  label: 'Settings' },

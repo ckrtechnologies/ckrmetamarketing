@@ -131,17 +131,138 @@ async function deleteCampaign(accessToken, campaignId) {
 
 // ── Ad Sets ───────────────────────────────────────────────────
 
+function formatMetaTargeting(targeting = {}) {
+  const geo = targeting.geo_locations || {};
+  const formattedGeo = {};
+
+  if (geo.location_types && geo.location_types.length > 0) {
+    formattedGeo.location_types = geo.location_types;
+  }
+
+  // Meta Graph API Rule:
+  // If cities or regions are targeted, do NOT include countries (otherwise it throws 1487479 "City targeting isn't supported in the country you selected")
+  const validCities = Array.isArray(geo.cities)
+    ? geo.cities.filter(c => c && (c.key || c.id)).map(c => ({
+        key: String(c.key || c.id),
+        radius: Number(c.radius) || 25,
+        distance_unit: c.distance_unit || 'kilometer',
+      }))
+    : [];
+
+  const validRegions = Array.isArray(geo.regions)
+    ? geo.regions.filter(r => r && (r.key || r.id)).map(r => ({
+        key: String(r.key || r.id),
+      }))
+    : [];
+
+  if (validCities.length > 0) {
+    formattedGeo.cities = validCities;
+    if (validRegions.length > 0) formattedGeo.regions = validRegions;
+  } else if (validRegions.length > 0) {
+    formattedGeo.regions = validRegions;
+  } else {
+    formattedGeo.countries = (geo.countries && geo.countries.length > 0)
+      ? geo.countries
+      : (targeting.countries && targeting.countries.length > 0)
+        ? targeting.countries
+        : ['IN'];
+  }
+
+  const result = {
+    geo_locations: formattedGeo,
+    age_min: parseInt(targeting.age_min) || 18,
+    age_max: parseInt(targeting.age_max) || 65,
+    genders: targeting.genders || [0],
+  };
+
+  if (targeting.publisher_platforms?.length) {
+    result.publisher_platforms = targeting.publisher_platforms;
+  } else {
+    result.publisher_platforms = ['facebook', 'instagram'];
+  }
+
+  if (targeting.device_platforms?.length) {
+    result.device_platforms = targeting.device_platforms;
+  }
+
+  if (targeting.locales?.length) {
+    result.locales = targeting.locales;
+  }
+
+  // Clean flexible_spec to prevent invalid empty arrays/structures
+  if (Array.isArray(targeting.flexible_spec) && targeting.flexible_spec.length > 0) {
+    const cleanedFlexible = [];
+    for (const group of targeting.flexible_spec) {
+      if (!group || typeof group !== 'object') continue;
+      const cleanGroup = {};
+      for (const [key, items] of Object.entries(group)) {
+        if (Array.isArray(items) && items.length > 0) {
+          const validItems = items
+            .filter(item => item && (item.id || typeof item === 'string'))
+            .map(item => typeof item === 'string' ? { id: item } : { id: String(item.id), name: item.name });
+          if (validItems.length > 0) {
+            cleanGroup[key] = validItems;
+          }
+        }
+      }
+      if (Object.keys(cleanGroup).length > 0) {
+        cleanedFlexible.push(cleanGroup);
+      }
+    }
+    if (cleanedFlexible.length > 0) {
+      result.flexible_spec = cleanedFlexible;
+    }
+  } else if (targeting.interests && targeting.interests.length > 0) {
+    const validInterests = targeting.interests
+      .filter(i => i && (i.id || typeof i === 'string'))
+      .map(i => typeof i === 'string' ? { id: i } : { id: String(i.id), name: i.name });
+    if (validInterests.length > 0) {
+      result.flexible_spec = [{ interests: validInterests }];
+    }
+  }
+
+  // Clean exclusions
+  if (targeting.exclusions && typeof targeting.exclusions === 'object') {
+    const cleanExclusions = {};
+    for (const [key, items] of Object.entries(targeting.exclusions)) {
+      if (Array.isArray(items) && items.length > 0) {
+        const validItems = items
+          .filter(item => item && (item.id || typeof item === 'string'))
+          .map(item => typeof item === 'string' ? { id: item } : { id: String(item.id), name: item.name });
+        if (validItems.length > 0) {
+          cleanExclusions[key] = validItems;
+        }
+      }
+    }
+    if (Object.keys(cleanExclusions).length > 0) {
+      result.exclusions = cleanExclusions;
+    }
+  }
+
+  if (targeting.custom_audiences && targeting.custom_audiences.length > 0) {
+    result.custom_audiences = targeting.custom_audiences;
+  }
+
+  if (targeting.excluded_custom_audiences && targeting.excluded_custom_audiences.length > 0) {
+    result.excluded_custom_audiences = targeting.excluded_custom_audiences;
+  }
+
+  // Meta Graph API v19+ requires targeting_automation.advantage_audience to be 0 or 1
+  result.targeting_automation = {
+    advantage_audience: (targeting.targeting_automation?.advantage_audience === 1 || targeting.targeting_automation?.detailed_targeting_expansion === 1) ? 1 : 0,
+  };
+
+  return result;
+}
+
 async function listAdSets(accessToken, actId, campaignId) {
   const params = {
     access_token: accessToken,
     fields: 'id,name,status,effective_status,targeting,daily_budget,lifetime_budget,start_time,end_time,campaign_id,destination_type,optimization_goal',
     limit: 100,
   };
-  if (campaignId) {
-    params.filtering = JSON.stringify([{ field: 'campaign.id', operator: 'EQUAL', value: String(campaignId) }]);
-  }
-
-  const r = await client(accessToken).get(`/${actId}/adsets`, { params });
+  const endpoint = campaignId ? `/${campaignId}/adsets` : `/${actId}/adsets`;
+  const r = await client(accessToken).get(endpoint, { params });
   return r.data?.data || [];
 }
 
@@ -163,36 +284,71 @@ async function createAdSet(accessToken, actId, {
   status = 'PAUSED',
   page_id,
 }) {
-  const payload = {
-    name,
-    campaign_id,
-    billing_event,
-    optimization_goal,
-    destination_type,
-    bid_strategy: 'LOWEST_COST_WITHOUT_CAP',
-    targeting: {
-      geo_locations: targeting.geo_locations || { countries: ['IN'] },
-      age_min: targeting.age_min || 18,
-      age_max: targeting.age_max || 65,
-      genders: targeting.genders || [0],   // 0=all, 1=male, 2=female
-      publisher_platforms: ['facebook', 'instagram'],
-      ...(targeting.interests?.length ? {
-        flexible_spec: [{ interests: targeting.interests.map(i => ({ id: i.id, name: i.name })) }],
-      } : {}),
-    },
-    promoted_object: {
-      page_id: String(page_id),
-    },
-    status,
-  };
+  let currentTargeting = formatMetaTargeting(targeting);
 
-  if (daily_budget) payload.daily_budget = daily_budget;
-  if (lifetime_budget) payload.lifetime_budget = lifetime_budget;
-  if (start_time) payload.start_time = start_time;
-  if (end_time) payload.end_time = end_time;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const payload = {
+      name,
+      campaign_id,
+      billing_event,
+      optimization_goal,
+      destination_type,
+      bid_strategy: 'LOWEST_COST_WITHOUT_CAP',
+      targeting: currentTargeting,
+      promoted_object: {
+        page_id: String(page_id),
+      },
+      status,
+    };
 
-  const r = await client(accessToken).post(`/${actId}/adsets`, payload);
-  return r.data;
+    if (daily_budget) payload.daily_budget = daily_budget;
+    if (lifetime_budget) payload.lifetime_budget = lifetime_budget;
+    if (start_time) payload.start_time = start_time;
+    if (end_time) payload.end_time = end_time;
+
+    try {
+      const r = await client(accessToken).post(`/${actId}/adsets`, payload);
+      return r.data;
+    } catch (err) {
+      const errData = err.response?.data?.error;
+      const errMsg = errData?.error_user_msg || errData?.message || '';
+
+      // Check if Meta rejected an invalid interest or behavior ID
+      const match = errMsg.match(/Interests with ID (\d+) is invalid/i) ||
+                    errMsg.match(/ID (\d+) is invalid/i) ||
+                    errMsg.match(/with ID (\d+) is invalid/i);
+
+      if (match && match[1] && currentTargeting.flexible_spec) {
+        const badId = match[1];
+        console.warn(`[createAdSet] Meta rejected invalid targeting ID ${badId}. Stripping and retrying...`);
+
+        const newFlexible = [];
+        for (const group of currentTargeting.flexible_spec) {
+          const newGroup = {};
+          for (const [k, items] of Object.entries(group)) {
+            const filtered = items.filter(item => String(item.id) !== String(badId));
+            if (filtered.length > 0) newGroup[k] = filtered;
+          }
+          if (Object.keys(newGroup).length > 0) newFlexible.push(newGroup);
+        }
+
+        if (newFlexible.length > 0) {
+          currentTargeting.flexible_spec = newFlexible;
+        } else {
+          delete currentTargeting.flexible_spec;
+        }
+        continue;
+      }
+
+      // Check for Advantage audience flag requirement error 1870227
+      if (errData?.error_subcode === 1870227) {
+        currentTargeting.targeting_automation = { advantage_audience: 0 };
+        continue;
+      }
+
+      throw err;
+    }
+  }
 }
 
 async function updateAdSet(accessToken, adsetId, updates) {
@@ -297,11 +453,8 @@ async function listAds(accessToken, actId, campaignId) {
     fields: 'id,name,status,effective_status,creative{id,name,title,body,image_url,thumbnail_url,call_to_action_type},adset_id,campaign_id,created_time',
     limit: 100,
   };
-  if (campaignId) {
-    params.filtering = JSON.stringify([{ field: 'campaign.id', operator: 'EQUAL', value: String(campaignId) }]);
-  }
-
-  const r = await client(accessToken).get(`/${actId}/ads`, { params });
+  const endpoint = campaignId ? `/${campaignId}/ads` : `/${actId}/ads`;
+  const r = await client(accessToken).get(endpoint, { params });
   return r.data?.data || [];
 }
 

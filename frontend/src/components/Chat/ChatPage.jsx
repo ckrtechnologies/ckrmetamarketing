@@ -1,11 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { io } from 'socket.io-client';
 import {
-  listConversations, getConversation, sendReply, sendTemplateInChat, startConversation, closeConversation, pollMessages,
+  listConversations, getConversation, sendReply, sendMediaReply, sendTemplateInChat, startConversation, closeConversation
 } from '../../api/chat.js';
 import { listContacts } from '../../api/contacts.js';
 import { listWabaAccounts, getWabaTemplates } from '../../api/waba.js';
 import './Chat.css';
+
+const API_BASE = import.meta.env.VITE_API_URL || '/api';
+const SOCKET_URL = API_BASE.replace('/api', '');
 
 function timeAgo(dateStr) {
   if (!dateStr) return '';
@@ -50,9 +54,10 @@ function formatPhoneDisplay(phone) {
 }
 
 function MessageStatusIcon({ status }) {
-  if (status === 'sent')      return <span className="msg-status">✓</span>;
-  if (status === 'delivered') return <span className="msg-status msg-status--delivered">✓✓</span>;
-  if (status === 'read')      return <span className="msg-status msg-status--read">✓✓</span>;
+  if (status === 'sent')      return <span className="msg-status" style={{color: '#999'}}>✓</span>;
+  if (status === 'delivered') return <span className="msg-status" style={{color: '#999'}}>✓✓</span>;
+  if (status === 'read')      return <span className="msg-status" style={{color: '#53bdeb'}}>✓✓</span>;
+  if (status === 'failed')    return <span className="msg-status" style={{color: 'var(--clr-danger)'}}>✕</span>;
   return null;
 }
 
@@ -71,6 +76,10 @@ export default function ChatPage({ user }) {
   const [statusFilter,  setStatusFilter]  = useState('');
   const [windowExpired, setWindowExpired] = useState(false);
 
+  // Attachments
+  const [attachment, setAttachment] = useState(null);
+  const fileInputRef = useRef(null);
+
   // New Chat Modal
   const [showNewChatModal, setShowNewChatModal] = useState(false);
   const [allContacts,     setAllContacts]     = useState([]);
@@ -85,8 +94,7 @@ export default function ChatPage({ user }) {
   const [sendingTemplate, setSendingTemplate] = useState(false);
 
   const messagesEndRef  = useRef(null);
-  const pollIntervalRef = useRef(null);
-  const lastMsgRef      = useRef(null);
+  const socketRef = useRef(null);
 
   useEffect(() => { loadConversations(); }, [search, statusFilter]);
 
@@ -98,6 +106,65 @@ export default function ChatPage({ user }) {
       startAndOpenChat(phoneParam, nameParam);
     }
   }, [searchParams]);
+
+  // Setup Socket.io
+  useEffect(() => {
+    if (!user?.org_id) return;
+    
+    const socket = io(SOCKET_URL);
+    socketRef.current = socket;
+
+    socket.on('connect', () => {
+      socket.emit('join_org', user.org_id);
+    });
+
+    socket.on('new_message', (data) => {
+      const { conversation_id, message, conversation } = data;
+      // If we are currently viewing this chat, append it!
+      setActiveConv(prevConv => {
+        if (prevConv && prevConv.id === conversation_id) {
+          setMessages(prev => {
+            if (prev.find(m => m.id === message.id)) return prev;
+            return [...prev, message];
+          });
+          // Also if they message us, the window resets!
+          if (message.direction === 'inbound') {
+            setWindowExpired(false);
+          }
+        }
+        return prevConv;
+      });
+
+      // Update the conversation list with the latest message snippet and unread count
+      setConversations(prev => {
+        const idx = prev.findIndex(c => c.id === conversation_id);
+        if (idx !== -1) {
+          const newConvs = [...prev];
+          newConvs[idx].last_message = message.body.substring(0, 60);
+          newConvs[idx].last_message_at = message.sent_at;
+          if (activeConv?.id !== conversation_id) {
+            newConvs[idx].unread_count = (newConvs[idx].unread_count || 0) + 1;
+          }
+          // Move to top
+          const [item] = newConvs.splice(idx, 1);
+          newConvs.unshift(item);
+          return newConvs;
+        } else if (conversation) {
+          return [conversation, ...prev];
+        }
+        return prev;
+      });
+    });
+
+    socket.on('message_status', (data) => {
+      const { wamid, status, timestamp } = data;
+      setMessages(prev => prev.map(m => m.wamid === wamid ? { ...m, status, [status + '_at']: timestamp } : m));
+    });
+
+    return () => {
+      socket.disconnect();
+    };
+  }, [user]);
 
   async function loadConversations() {
     try {
@@ -128,87 +195,99 @@ export default function ChatPage({ user }) {
     setMessages([]);
     setWindowExpired(!isWindowOpen(conv));
     setLoadingMsgs(true);
-
-    clearInterval(pollIntervalRef.current);
+    setAttachment(null);
 
     try {
       const data = await getConversation(conv.id);
       setMessages(data.messages || []);
-      if (data.messages?.length > 0) {
-        lastMsgRef.current = data.messages[data.messages.length - 1].sent_at;
-      }
       // Update unread count in sidebar
       setConversations(prev =>
         prev.map(c => c.id === conv.id ? { ...c, unread_count: 0 } : c)
       );
     } catch (e) {}
     finally { setLoadingMsgs(false); }
-
-    // Poll for new messages every 12 seconds only if the tab is active
-    pollIntervalRef.current = setInterval(async () => {
-      try {
-        if (typeof document !== 'undefined' && document.hidden) return;
-        const since = lastMsgRef.current;
-        if (!since) return;
-        const data = await pollMessages(conv.id, since);
-        if (data.messages?.length > 0) {
-          setMessages(prev => {
-            const ids = new Set(prev.map(m => m.id));
-            const newOnes = data.messages.filter(m => !ids.has(m.id));
-            if (newOnes.length === 0) return prev;
-            lastMsgRef.current = newOnes[newOnes.length - 1].sent_at;
-            return [...prev, ...newOnes];
-          });
-        }
-      } catch (e) {}
-    }, 12000);
   }
-
-  // Cleanup poll on unmount
-  useEffect(() => () => clearInterval(pollIntervalRef.current), []);
 
   // Scroll to bottom on new messages
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  }, [messages, attachment]);
+
+  function handleFileSelect(e) {
+    if (e.target.files && e.target.files[0]) {
+      setAttachment(e.target.files[0]);
+    }
+  }
 
   async function handleSend() {
-    if (!text.trim() || !activeConv || sending) return;
-    const draft = text;
+    if ((!text.trim() && !attachment) || !activeConv || sending) return;
+    const draftText = text;
+    const file = attachment;
+    
     setText('');
+    setAttachment(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    
     setSending(true);
+
+    const isMedia = !!file;
+    const tempId = `opt-${Date.now()}`;
+    let previewBody = draftText;
+    
+    if (isMedia) {
+      let mediaType = 'document';
+      if (file.type.startsWith('image/')) mediaType = 'image';
+      else if (file.type.startsWith('video/')) mediaType = 'video';
+      previewBody = `[${mediaType.charAt(0).toUpperCase() + mediaType.slice(1)}: ${draftText || file.name} | URL: local]`;
+    }
 
     // Optimistic add
     const optimistic = {
-      id: `opt-${Date.now()}`,
+      id: tempId,
       direction: 'outbound',
-      type: 'text',
-      body: draft,
+      type: isMedia ? (file.type.startsWith('image/') ? 'image' : file.type.startsWith('video/') ? 'video' : 'document') : 'text',
+      body: previewBody,
       status: 'sent',
       sent_at: new Date().toISOString(),
     };
     setMessages(prev => [...prev, optimistic]);
 
     try {
-      const data = await sendReply(activeConv.id, draft);
+      let data;
+      if (isMedia) {
+        const formData = new FormData();
+        formData.append('file', file);
+        if (draftText) formData.append('caption', draftText);
+        data = await sendMediaReply(activeConv.id, formData);
+        
+        // Update optimistic body with real URL
+        if (data.mediaLink) {
+          const actualType = optimistic.type;
+          optimistic.body = `[${actualType.charAt(0).toUpperCase() + actualType.slice(1)}: ${draftText || file.name} | URL: ${data.mediaLink}]`;
+        }
+      } else {
+        data = await sendReply(activeConv.id, draftText);
+      }
+      
       setMessages(prev => prev.map(m =>
-        m.id === optimistic.id ? { ...optimistic, wamid: data.wamid } : m
+        m.id === tempId ? { ...optimistic, wamid: data.wamid } : m
       ));
+      
       setConversations(prev =>
         prev.map(c => c.id === activeConv.id ? {
           ...c,
-          last_message: `You: ${draft.substring(0, 60)}`,
+          last_message: `You: ${optimistic.body.substring(0, 60)}`,
           last_message_at: new Date().toISOString(),
         } : c)
       );
     } catch (err) {
-      setMessages(prev => prev.filter(m => m.id !== optimistic.id));
+      setMessages(prev => prev.filter(m => m.id !== tempId));
       if (err.message && (err.message.includes('expired') || err.message.includes('window'))) {
         setWindowExpired(true);
       } else {
         alert('Failed to send: ' + err.message);
       }
-      setText(draft);
+      if (!isMedia) setText(draftText);
     } finally {
       setSending(false);
     }
@@ -218,15 +297,12 @@ export default function ChatPage({ user }) {
   async function openTemplateModal() {
     setShowTemplateModal(true);
     try {
-      const wabaList = await listWabaAccounts();
-      const targetWaba = wabaList.accounts?.[0];
-      if (targetWaba) {
-        const tplData = await getWabaTemplates(targetWaba.id);
-        const approved = (tplData.templates || []).filter(t => ['APPROVED', 'ACTIVE'].includes(t.status?.toUpperCase()));
-        setAvailableTemplates(approved);
-        if (approved.length > 0) {
-          handleSelectTemplate(approved[0]);
-        }
+      if (!activeConv?.waba_id) return;
+      const tplData = await getWabaTemplates(activeConv.waba_id);
+      const approved = (tplData.templates || []).filter(t => ['APPROVED', 'ACTIVE'].includes(t.status?.toUpperCase()));
+      setAvailableTemplates(approved);
+      if (approved.length > 0) {
+        handleSelectTemplate(approved[0]);
       }
     } catch (e) {
       console.error(e);
@@ -312,6 +388,47 @@ export default function ChatPage({ user }) {
       e.preventDefault();
       handleSend();
     }
+  }
+
+  // Parse Media Body format: [Image: caption | URL: https://...]
+  function renderMessageBody(msg) {
+    if (msg.type === 'template') {
+      return <div className="msg-template-badge">📄 {msg.body}</div>;
+    }
+
+    if (msg.type === 'image' || msg.type === 'document' || msg.type === 'video') {
+      const match = msg.body.match(/\[(.*?):\s*(.*?)\s*\|\s*URL:\s*(.*?)\]/);
+      if (match) {
+        const [_, type, caption, url] = match;
+        if (msg.type === 'image') {
+          return (
+            <div className="msg-media">
+              <img src={url} alt={caption} className="msg-media-img" onClick={() => window.open(url, '_blank')} />
+              {caption && <div className="msg-caption">{caption}</div>}
+            </div>
+          );
+        } else if (msg.type === 'document') {
+          return (
+            <div className="msg-document" onClick={() => window.open(url, '_blank')}>
+              <div className="msg-doc-icon">📄</div>
+              <div className="msg-doc-info">
+                <div className="msg-doc-name">{caption || 'Document'}</div>
+                <div className="msg-doc-link">Click to download</div>
+              </div>
+            </div>
+          );
+        } else if (msg.type === 'video') {
+          return (
+            <div className="msg-media">
+              <video src={url} controls className="msg-media-video" />
+              {caption && <div className="msg-caption">{caption}</div>}
+            </div>
+          );
+        }
+      }
+    }
+
+    return <div className="msg-body">{msg.body}</div>;
   }
 
   function renderMessages() {
@@ -417,7 +534,7 @@ export default function ChatPage({ user }) {
         {activeConv ? (
           <>
             {/* Top Bar */}
-            <div className="chat-window__header">
+            <div className="chat-header">
               <div className="chat-header-user">
                 <div className="conv-avatar" style={{ width: 38, height: 38, fontSize: 15 }}>
                   {(activeConv.customer_name || 'U').charAt(0).toUpperCase()}
@@ -459,7 +576,7 @@ export default function ChatPage({ user }) {
             {!windowOpen && (
               <div className="window-warning-banner" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div>
-                  ⚠️ <strong>24-hour service window is closed.</strong> Free-form text replies are blocked by WhatsApp rules until the customer replies.
+                  ⚠️ <strong>24-hour service window is closed.</strong> Free-form replies are blocked by WhatsApp rules until the customer replies.
                 </div>
                 <button className="btn btn--primary btn--sm" style={{ flexShrink: 0, marginLeft: 12 }} onClick={openTemplateModal}>
                   📄 Send Template to Reopen
@@ -472,7 +589,7 @@ export default function ChatPage({ user }) {
               {loadingMsgs ? (
                 <div className="loading-center" style={{ height: '100%' }}><div className="spinner" /></div>
               ) : messages.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--clr-text-3)', fontSize: 13 }}>
+                <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--clr-text-3)', fontSize: 13, backgroundColor: 'var(--clr-bg-alt)', borderRadius: 12, margin: 20 }}>
                   <div style={{ fontSize: 40, marginBottom: 10 }}>💬</div>
                   No messages yet. Send a message or template below.
                 </div>
@@ -480,7 +597,7 @@ export default function ChatPage({ user }) {
                 renderMessages().map((item) => {
                   if (item.type === 'separator') {
                     return (
-                      <div key={item.id} className="date-separator">
+                      <div key={item.id} className="msg-date-sep">
                         <span>{item.date}</span>
                       </div>
                     );
@@ -490,16 +607,10 @@ export default function ChatPage({ user }) {
                   return (
                     <div
                       key={item.id}
-                      className={`msg-bubble-wrap ${isInbound ? 'msg-bubble-wrap--inbound' : 'msg-bubble-wrap--outbound'}`}
+                      className={`msg-row ${isInbound ? '' : 'msg-row--out'}`}
                     >
-                      <div className={`msg-bubble ${isInbound ? 'msg-bubble--inbound' : 'msg-bubble--outbound'}`}>
-                        {item.type === 'template' ? (
-                          <div className="msg-template-badge">
-                            <span style={{ fontSize: 11, fontWeight: 700 }}>📄 {item.body}</span>
-                          </div>
-                        ) : (
-                          <div className="msg-body">{item.body}</div>
-                        )}
+                      <div className={`msg-bubble ${isInbound ? 'msg-bubble--in' : 'msg-bubble--out'} ${item.type !== 'text' ? 'msg-bubble--media' : ''}`}>
+                        {renderMessageBody(item)}
                         <div className="msg-meta">
                           <span className="msg-time">{formatTime(item.sent_at)}</span>
                           {!isInbound && <MessageStatusIcon status={item.status} />}
@@ -509,24 +620,52 @@ export default function ChatPage({ user }) {
                   );
                 })
               )}
+              {/* Attachment Preview UI */}
+              {attachment && (
+                <div className="attachment-preview">
+                  <div className="attachment-preview-header">
+                    <span>📎 Attachment: {attachment.name}</span>
+                    <button onClick={() => setAttachment(null)}>✕</button>
+                  </div>
+                  {attachment.type.startsWith('image/') && (
+                    <img src={URL.createObjectURL(attachment)} alt="Preview" style={{maxHeight: 120, borderRadius: 8, marginTop: 8}} />
+                  )}
+                </div>
+              )}
               <div ref={messagesEndRef} />
             </div>
 
             {/* Composer Input Area */}
             <div className="chat-composer">
+              <button 
+                className="chat-attach-btn" 
+                title="Attach Media"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={sending || !windowOpen}
+              >
+                📎
+              </button>
+              <input 
+                type="file" 
+                ref={fileInputRef} 
+                style={{display: 'none'}} 
+                onChange={handleFileSelect}
+                accept="image/*,video/*,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+              />
+              
               <input
                 type="text"
                 className="chat-input"
-                placeholder={windowOpen ? "Type a message... (Press Enter to send)" : "Type a message or click 'Send Template'..."}
+                placeholder={windowOpen ? "Type a message... (Press Enter to send)" : "24-hour window closed. Send a Template."}
                 value={text}
                 onChange={e => setText(e.target.value)}
                 onKeyDown={handleKeyDown}
-                disabled={sending}
+                disabled={sending || !windowOpen}
               />
               <button
                 className="chat-send-btn"
                 onClick={handleSend}
-                disabled={!text.trim() || sending}
+                disabled={(!text.trim() && !attachment) || sending}
                 title="Send Message"
               >
                 {sending ? '⏳' : '➤'}

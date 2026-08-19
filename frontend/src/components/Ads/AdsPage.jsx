@@ -51,15 +51,14 @@ const TARGET_LANGUAGES = [
 ];
 
 const POPULAR_TARGETING_CHIPS = [
-  { id: '6003260840572', name: 'Small business owners', category: 'Behavior' },
-  { id: '6003139266710', name: 'School (education)', category: 'Interest' },
-  { id: '6002714895372', name: 'Frequent international travelers', category: 'Behavior' },
-  { id: '6003348633372', name: 'People who prefer high-value goods in India', category: 'Behavior' },
-  { id: '6003017260572', name: 'Engaged Shoppers', category: 'Behavior' },
-  { id: '6002979192120', name: 'Real estate investment', category: 'Interest' },
-  { id: '6003184643710', name: 'Artificial intelligence (computing)', category: 'Interest' },
-  { id: '6003139266711', name: 'Software development', category: 'Interest' },
-  { id: '6003260840573', name: 'Founder, Director, CEO', category: 'Job Title' },
+  { name: 'Small Business', category: 'Interest', query: 'small business', cls: 'interests' },
+  { name: 'Software Development', category: 'Interest', query: 'software development', cls: 'interests' },
+  { name: 'Real Estate', category: 'Interest', query: 'real estate', cls: 'interests' },
+  { name: 'Engaged Shoppers', category: 'Behavior', query: 'engaged shoppers', cls: 'behaviors' },
+  { name: 'Frequent Travelers', category: 'Behavior', query: 'travelers', cls: 'behaviors' },
+  { name: 'Education', category: 'Interest', query: 'education', cls: 'interests' },
+  { name: 'Artificial Intelligence', category: 'Interest', query: 'artificial intelligence', cls: 'interests' },
+  { name: 'Digital Marketing', category: 'Interest', query: 'digital marketing', cls: 'interests' },
 ];
 
 const OBJECTIVES = [
@@ -1284,7 +1283,7 @@ function FullTargetingBuilder({ targeting = {}, onChange, customAudiences = [], 
   const [targetSuggestions, setTargetSuggestions] = useState([]);
   const [searchingTarget, setSearchingTarget] = useState(false);
   const [activeTargetMode, setActiveTargetMode] = useState('include'); // 'include' | 'narrow' | 'exclude'
-  const [advantageExpansion, setAdvantageExpansion] = useState(targeting.targeting_automation?.detailed_targeting_expansion === 1);
+  const [advantageExpansion, setAdvantageExpansion] = useState(targeting.targeting_automation?.advantage_audience === 1);
 
   // Custom Audiences
   const [includedAudiences, setIncludedAudiences] = useState(targeting.custom_audiences?.map(a => a.id) || []);
@@ -1301,18 +1300,24 @@ function FullTargetingBuilder({ targeting = {}, onChange, customAudiences = [], 
   useEffect(() => {
     const flexible_spec = [];
     if (includes.length > 0) {
-      flexible_spec.push({
-        interests: includes.filter(i => i.category === 'Interest').map(i => ({ id: i.id, name: i.name })),
-        behaviors: includes.filter(i => i.category === 'Behavior').map(b => ({ id: b.id, name: b.name })),
-        work_positions: includes.filter(i => i.category === 'Job Title').map(w => ({ id: w.id, name: w.name })),
-      });
+      const incGroup = {};
+      const intList = includes.filter(i => i.category === 'Interest' || (!['Behavior', 'Job Title', 'Demographic'].includes(i.category))).map(i => ({ id: String(i.id), name: i.name }));
+      const behList = includes.filter(i => i.category === 'Behavior').map(b => ({ id: String(b.id), name: b.name }));
+      const workList = includes.filter(i => i.category === 'Job Title' || i.category === 'Demographic').map(w => ({ id: String(w.id), name: w.name }));
+      if (intList.length > 0) incGroup.interests = intList;
+      if (behList.length > 0) incGroup.behaviors = behList;
+      if (workList.length > 0) incGroup.work_positions = workList;
+      if (Object.keys(incGroup).length > 0) flexible_spec.push(incGroup);
     }
     if (narrows.length > 0) {
-      flexible_spec.push({
-        interests: narrows.filter(i => i.category === 'Interest').map(i => ({ id: i.id, name: i.name })),
-        behaviors: narrows.filter(i => i.category === 'Behavior').map(b => ({ id: b.id, name: b.name })),
-        work_positions: narrows.filter(i => i.category === 'Job Title').map(w => ({ id: w.id, name: w.name })),
-      });
+      const narGroup = {};
+      const intList = narrows.filter(i => i.category === 'Interest' || (!['Behavior', 'Job Title', 'Demographic'].includes(i.category))).map(i => ({ id: String(i.id), name: i.name }));
+      const behList = narrows.filter(i => i.category === 'Behavior').map(b => ({ id: String(b.id), name: b.name }));
+      const workList = narrows.filter(i => i.category === 'Job Title' || i.category === 'Demographic').map(w => ({ id: String(w.id), name: w.name }));
+      if (intList.length > 0) narGroup.interests = intList;
+      if (behList.length > 0) narGroup.behaviors = behList;
+      if (workList.length > 0) narGroup.work_positions = workList;
+      if (Object.keys(narGroup).length > 0) flexible_spec.push(narGroup);
     }
 
     const geo_locations = {
@@ -1334,10 +1339,12 @@ function FullTargetingBuilder({ targeting = {}, onChange, customAudiences = [], 
 
     if (flexible_spec.length > 0) payload.flexible_spec = flexible_spec;
     if (excludes.length > 0) {
-      payload.exclusions = {
-        interests: excludes.filter(i => i.category === 'Interest').map(i => ({ id: i.id, name: i.name })),
-        behaviors: excludes.filter(i => i.category === 'Behavior').map(b => ({ id: b.id, name: b.name })),
-      };
+      const excGroup = {};
+      const intList = excludes.filter(i => i.category === 'Interest' || (!['Behavior', 'Job Title', 'Demographic'].includes(i.category))).map(i => ({ id: String(i.id), name: i.name }));
+      const behList = excludes.filter(i => i.category === 'Behavior').map(b => ({ id: String(b.id), name: b.name }));
+      if (intList.length > 0) excGroup.interests = intList;
+      if (behList.length > 0) excGroup.behaviors = behList;
+      if (Object.keys(excGroup).length > 0) payload.exclusions = excGroup;
     }
     if (includedAudiences.length > 0) {
       payload.custom_audiences = includedAudiences.map(id => ({ id }));
@@ -1345,9 +1352,7 @@ function FullTargetingBuilder({ targeting = {}, onChange, customAudiences = [], 
     if (excludedAudiences.length > 0) {
       payload.excluded_custom_audiences = excludedAudiences.map(id => ({ id }));
     }
-    if (advantageExpansion) {
-      payload.targeting_automation = { detailed_targeting_expansion: 1 };
-    }
+    payload.targeting_automation = { advantage_audience: advantageExpansion ? 1 : 0 };
     if (wifiOnly) {
       payload.wireless_carrier = ['Wifi'];
     }
@@ -1415,7 +1420,7 @@ function FullTargetingBuilder({ targeting = {}, onChange, customAudiences = [], 
     if (t.excluded_custom_audiences) setExcludedAudiences(t.excluded_custom_audiences.map(a => a.id));
     if (t.device_platforms) setDevices(t.device_platforms);
     if (t.publisher_platforms) setPublishers(t.publisher_platforms);
-    if (t.targeting_automation?.detailed_targeting_expansion) setAdvantageExpansion(true);
+    if (t.targeting_automation?.advantage_audience !== undefined) setAdvantageExpansion(t.targeting_automation.advantage_audience === 1);
   }
 
   // Geo search
@@ -1797,17 +1802,21 @@ function FullTargetingBuilder({ targeting = {}, onChange, customAudiences = [], 
         {/* Quick Popular Suggestions */}
         <div>
           <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--clr-text-3)', marginBottom: 6 }}>
-            💡 Quick Add Popular Targeting:
+            💡 Quick Search Popular Targeting (Real Meta IDs):
           </div>
           <div className="targeting-preset-row">
             {POPULAR_TARGETING_CHIPS.map(chip => (
               <button
-                key={chip.id}
+                key={chip.name}
                 type="button"
                 className="targeting-preset-pill"
-                onClick={() => addTargetItem(chip, 'include')}
+                onClick={() => {
+                  setTargetCategoryClass(chip.cls);
+                  setTargetQuery(chip.query);
+                  handleSearchTarget(chip.query, chip.cls);
+                }}
               >
-                + {chip.name} <span style={{ opacity: 0.6, fontSize: 9 }}>({chip.category})</span>
+                🔍 {chip.name} <span style={{ opacity: 0.6, fontSize: 9 }}>({chip.category})</span>
               </button>
             ))}
           </div>
@@ -1815,8 +1824,18 @@ function FullTargetingBuilder({ targeting = {}, onChange, customAudiences = [], 
 
         {/* 1. INCLUDE CRITERIA */}
         <div>
-          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--clr-text)', marginBottom: 6, display: 'flex', justifyContent: 'space-between' }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--clr-text)', marginBottom: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span>✅ INCLUDE People Who Match (ANY of these) ({includes.length})</span>
+            {includes.length > 0 && (
+              <button
+                type="button"
+                className="btn btn--ghost btn--sm"
+                style={{ fontSize: 10, padding: '1px 6px', color: 'var(--clr-danger)' }}
+                onClick={() => setIncludes([])}
+              >
+                ✕ Clear All
+              </button>
+            )}
           </div>
           {includes.length === 0 ? (
             <div style={{ fontSize: 11, color: 'var(--clr-text-3)', fontStyle: 'italic' }}>
@@ -2915,10 +2934,10 @@ function CreateAdTab({ account, accounts, onSuccess }) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 24 }}>
             {[
               ['Campaign Name',    form.campaign_name],
-              ['Objective',        `${selectedObjective?.icon} ${selectedObjective?.name}`],
-              ['Target Country',   COUNTRIES.find(c => c.value === form.countries[0])?.label],
-              ['Age Range',        `${form.age_min} – ${form.age_max}`],
-              ['Interests',        form.interests.length > 0 ? form.interests.map(i => i.name).join(', ') : 'All / Broad Audience'],
+              ['Objective',        `${selectedObjective?.icon || ''} ${selectedObjective?.name || form.objective}`],
+              ['Target Country',   COUNTRIES.find(c => c.value === (targetingPayload?.geo_locations?.countries?.[0] || 'IN'))?.label || '🇮🇳 India'],
+              ['Age Range',        `${targetingPayload?.age_min || 18} – ${targetingPayload?.age_max || 65}`],
+              ['Interests',        (targetingPayload?.flexible_spec || []).flatMap(g => [...(g.interests || []), ...(g.behaviors || []), ...(g.work_positions || [])]).map(i => i.name).filter(Boolean).join(', ') || 'All / Broad Audience'],
               ['Daily Budget',     `${account?.currency === 'INR' ? '₹' : '$'}${form.daily_budget}`],
               ['Launch Status',    form.status],
               ['Facebook Page',    pages.find(p => p.id === form.page_id)?.name || '—'],

@@ -50,8 +50,14 @@ export default function CampaignBuilder({ onClose, onCreated }) {
     const bodyComp = tpl.components?.find(c => c.type === 'BODY');
     const text = bodyComp?.text || '';
     const matches = text.match(/{{\s*(\d+)\s*}}/g) || [];
-    const unique = [...new Set(matches.map(m => m.replace(/[{}]/g, '').trim()))];
-    return unique.sort((a, b) => Number(a) - Number(b));
+    const unique = [...new Set(matches.map(m => m.replace(/[{}]/g, '').trim()))].sort((a, b) => Number(a) - Number(b));
+    
+    const headerComp = tpl.components?.find(c => c.type === 'HEADER');
+    if (headerComp && ['IMAGE', 'DOCUMENT', 'VIDEO'].includes(headerComp.format)) {
+      unique.push('header_link');
+    }
+    
+    return unique;
   }
 
   const templateVars = getTemplateVariables(selectedTemplate);
@@ -60,8 +66,8 @@ export default function CampaignBuilder({ onClose, onCreated }) {
     const vars = getTemplateVariables(t);
     const initialVars = {};
     vars.forEach((v, idx) => {
-      // Default first variable to {{name}} (Customer Name) as standard best practice
-      initialVars[v] = idx === 0 ? '{{name}}' : '';
+      // Default first text variable to {{name}} as standard best practice
+      initialVars[v] = (idx === 0 && v !== 'header_link') ? '{{name}}' : '';
     });
     setForm(f => ({
       ...f,
@@ -206,8 +212,13 @@ export default function CampaignBuilder({ onClose, onCreated }) {
                         <div key={v} className="form-group" style={{ marginBottom: 0 }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
                             <label className="form-label" style={{ marginBottom: 0 }}>
-                              Parameter <strong>&#123;&#123;{v}&#125;&#125;</strong>:
+                              {v === 'header_link' ? (
+                                <>Media Header Link <strong>(Required URL)</strong>:</>
+                              ) : (
+                                <>Parameter <strong>&#123;&#123;{v}&#125;&#125;</strong>:</>
+                              )}
                             </label>
+                            {v !== 'header_link' && (
                             <div style={{ display: 'flex', gap: 4 }}>
                               <button
                                 type="button"
@@ -226,6 +237,7 @@ export default function CampaignBuilder({ onClose, onCreated }) {
                                 📞 Phone
                               </button>
                             </div>
+                            )}
                           </div>
                           <input
                             className="form-input"

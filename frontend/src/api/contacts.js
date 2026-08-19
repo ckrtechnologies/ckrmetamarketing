@@ -21,7 +21,8 @@ export async function importCSV(file, group_id) {
   const fd = new FormData();
   fd.append('file', file);
   if (group_id) fd.append('group_id', group_id);
-  const res = await fetch('/api/v2/contacts/import-csv', {
+  const API_BASE = import.meta.env.VITE_API_URL || '/api';
+  const res = await fetch(`${API_BASE}/v2/contacts/import-csv`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}` },
     body: fd,

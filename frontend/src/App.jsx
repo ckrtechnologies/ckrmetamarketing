@@ -11,6 +11,7 @@ import CampaignList  from './components/Campaign/CampaignList.jsx';
 import ChatPage      from './components/Chat/ChatPage.jsx';
 import ReportsPage   from './components/Reports/ReportsPage.jsx';
 import AdsPage       from './components/Ads/AdsPage.jsx';
+import MediaManager  from './components/Media/MediaManager.jsx';
 
 const Placeholder = ({ name }) => (
   <div className="card fade-in" style={{ textAlign: 'center', padding: '60px 20px' }}>
@@ -87,6 +88,11 @@ export default function App() {
         <Route path="/ads" element={
           <ProtectedRoute user={user} org={org} title="Ads Manager">
             <AdsPage />
+          </ProtectedRoute>
+        } />
+        <Route path="/media" element={
+          <ProtectedRoute user={user} org={org} title="Media & Documents">
+            <MediaManager />
           </ProtectedRoute>
         } />
         <Route path="/waba" element={
