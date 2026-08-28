@@ -105,10 +105,18 @@ async function createContact({ org_id, group_id, name, phone, tags, metadata }) 
 }
 
 async function upsertContacts(rows) {
+  // Ensure rows passed in have unique (org_id, phone) to prevent PostgreSQL 21000 error
+  const uniqueMap = new Map();
+  for (const r of rows) {
+    uniqueMap.set(`${r.org_id}:${r.phone}`, r);
+  }
+  const uniqueRows = Array.from(uniqueMap.values());
+  if (uniqueRows.length === 0) return [];
+
   // rows: [{ org_id, group_id, name, phone, tags, metadata }]
   const { data, error } = await supabase
     .from('contacts')
-    .upsert(rows, { onConflict: 'org_id,phone', ignoreDuplicates: false })
+    .upsert(uniqueRows, { onConflict: 'org_id,phone', ignoreDuplicates: false })
     .select('*, contact_groups(id, name, vertical)');
   if (error) throw error;
   return data;

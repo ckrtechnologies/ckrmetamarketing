@@ -159,7 +159,9 @@ async function importCSV(req, res) {
     const { group_id } = req.body;
     const csvText = req.file.buffer.toString('utf-8');
 
-    const rows = [];
+    const rowsMap = new Map();
+    let totalParsedRows = 0;
+
     await new Promise((resolve, reject) => {
       const stream = Readable.from([csvText]);
       stream
@@ -168,23 +170,41 @@ async function importCSV(req, res) {
           const rawPhone = row.phone || row.Phone || row.mobile || row.Mobile || '';
           const phone = normalizePhoneNumber(rawPhone);
           if (phone.length >= 10) {
-            rows.push({
-              org_id:   req.orgId,
-              group_id: group_id || null,
-              name:     row.name || row.Name || null,
-              phone,
-              tags:     row.tags ? row.tags.split(',').map(t => t.trim()).filter(Boolean) : null,
-              metadata: Object.keys(row).reduce((acc, k) => {
-                if (!['phone','Phone','mobile','Mobile','name','Name','tags'].includes(k)) acc[k] = row[k];
-                return acc;
-              }, {}),
-            });
+            totalParsedRows++;
+            const existing = rowsMap.get(phone);
+            const tags = row.tags ? row.tags.split(',').map(t => t.trim()).filter(Boolean) : [];
+            const meta = Object.keys(row).reduce((acc, k) => {
+              if (!['phone','Phone','mobile','Mobile','name','Name','tags'].includes(k)) acc[k] = row[k];
+              return acc;
+            }, {});
+
+            if (existing) {
+              const mergedTags = Array.from(new Set([...(existing.tags || []), ...tags]));
+              rowsMap.set(phone, {
+                org_id:   req.orgId,
+                group_id: group_id || existing.group_id || null,
+                name:     row.name || row.Name || existing.name || null,
+                phone,
+                tags:     mergedTags.length > 0 ? mergedTags : null,
+                metadata: { ...existing.metadata, ...meta },
+              });
+            } else {
+              rowsMap.set(phone, {
+                org_id:   req.orgId,
+                group_id: group_id || null,
+                name:     row.name || row.Name || null,
+                phone,
+                tags:     tags.length > 0 ? tags : null,
+                metadata: meta,
+              });
+            }
           }
         })
         .on('end', resolve)
         .on('error', reject);
     });
 
+    const rows = Array.from(rowsMap.values());
     if (rows.length === 0) return res.status(400).json({ error: 'No valid phone numbers found in CSV' });
 
     // Batch upsert in chunks of 500
@@ -195,7 +215,12 @@ async function importCSV(req, res) {
       imported += (saved || []).length;
     }
 
-    res.json({ message: `${imported} contacts imported successfully`, total: rows.length, imported });
+    const duplicatesSkipped = totalParsedRows - rows.length;
+    const msg = duplicatesSkipped > 0
+      ? `${imported} contacts imported successfully (${duplicatesSkipped} duplicate entries merged)`
+      : `${imported} contacts imported successfully`;
+
+    res.json({ message: msg, total: rows.length, imported, totalParsedRows });
   } catch (err) {
     console.error('[importCSV]', err);
     res.status(500).json({ error: err.message });

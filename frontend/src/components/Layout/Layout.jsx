@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import Sidebar from './Sidebar.jsx';
+import ThemeToggle from '../Common/ThemeToggle.jsx';
 import './Layout.css';
 
 export default function Layout({ children, user, org, title }) {
@@ -34,7 +35,9 @@ export default function Layout({ children, user, org, title }) {
             </button>
             <span className="topbar__title">{title || 'CKR Meta Marketing'}</span>
           </div>
-          <div className="topbar__actions" />
+          <div className="topbar__actions">
+            <ThemeToggle />
+          </div>
         </header>
 
         <main className="app-content fade-in">

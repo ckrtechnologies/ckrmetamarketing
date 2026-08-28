@@ -1,6 +1,7 @@
 const campaignRepo = require('../repositories/campaignRepo');
 const contactRepo  = require('../repositories/contactRepo');
 const orgRepo      = require('../repositories/orgRepo');
+const chatRepo     = require('../repositories/chatRepo');
 const { sendTemplate } = require('../utils/metaClient');
 
 // ── CRUD ──────────────────────────────────────────────────────
@@ -152,7 +153,10 @@ async function launchCampaign(req, res) {
               parameters: [
                 {
                   type,
-                  [type]: { link }
+                  [type]: { 
+                    link,
+                    ...(type === 'document' ? { filename: link.split('/').pop().replace(/^\d+_/, '') } : {})
+                  }
                 }
               ]
             });
@@ -171,6 +175,27 @@ async function launchCampaign(req, res) {
         if (result.success) {
           const wamid = result.data?.messages?.[0]?.id;
           await campaignRepo.updateRecipientStatus(recipient.id, 'sent', { wamid });
+          
+          // Log the campaign message to Live Chat
+          try {
+            const conv = await chatRepo.upsertConversation({
+              org_id: req.orgId,
+              waba_id: waba.id,
+              customer_phone: recipient.phone,
+              last_message: `You: [Template: ${campaign.template_name}]`,
+            });
+            await chatRepo.addMessage({
+              conversation_id: conv.id,
+              direction: 'outbound',
+              type: 'template',
+              body: `[Template: ${campaign.template_name}]`,
+              wamid,
+              status: 'sent',
+            });
+          } catch (e) {
+            console.error('[campaign:chat_log_error]', e.message);
+          }
+          
           sent++;
         } else {
           await campaignRepo.updateRecipientStatus(recipient.id, 'failed', {

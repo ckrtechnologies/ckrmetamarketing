@@ -8,8 +8,33 @@ const path = require('path');
 
 async function listConversations(req, res) {
   try {
-    const { status, search, limit = 50, offset = 0 } = req.query;
-    const result = await chatRepo.getConversations(req.orgId, { status, search, limit: +limit, offset: +offset });
+    const {
+      status,
+      search,
+      waba_id,
+      window_status,
+      date_from,
+      date_to,
+      template_name,
+      group_id,
+      tag,
+      limit = 50,
+      offset = 0,
+    } = req.query;
+
+    const result = await chatRepo.getConversations(req.orgId, {
+      status,
+      search,
+      waba_id,
+      window_status,
+      date_from,
+      date_to,
+      template_name,
+      group_id,
+      tag,
+      limit: +limit,
+      offset: +offset,
+    });
     res.json(result);
   } catch (err) { res.status(500).json({ error: err.message }); }
 }

@@ -91,19 +91,10 @@ async function handleInboundMessage(value, msg, req) {
   }
 
   if (!wabaRow) {
-    const { data: fallbackWaba } = await orgRepo.supabasePublic()
-      .from('waba_accounts')
-      .select('id, org_id, access_token')
-      .order('is_active', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    wabaRow = fallbackWaba;
-  }
-
-  if (!wabaRow) {
-    console.warn(`[webhook] No WABA account found in system for inbound message`);
+    console.warn(`[webhook] No WABA account found in system for phone_number_id ${wabaPhoneId}. Ignoring message.`);
     return;
   }
+
 
   const { id: wabaDbId, org_id, access_token } = wabaRow;
 
@@ -182,7 +173,9 @@ async function handleInboundMessage(value, msg, req) {
     customer_phone: from,
     customer_name: customerName,
     last_message: body || `[${msgType}]`,
+    last_message_at: timestamp,
     window_expires: windowExpires,
+    is_inbound: true,
   });
 
   // Save inbound message
@@ -193,6 +186,7 @@ async function handleInboundMessage(value, msg, req) {
     body,
     wamid,
     status: 'delivered',
+    sent_at: timestamp,
   });
 
   const io = req.app.get('io');

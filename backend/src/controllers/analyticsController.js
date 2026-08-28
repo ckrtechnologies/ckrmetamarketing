@@ -57,14 +57,13 @@ async function getCampaignPerformance(req, res) {
 async function getAll(req, res) {
   try {
     const days = Math.min(parseInt(req.query.days || 14), 90);
-    const [stats, funnel, dailyMessages, dailyCampaigns, templates, campaigns] = await Promise.all([
-      repo.getOverviewStats(req.orgId),
-      repo.getCampaignFunnelStats(req.orgId),
-      repo.getDailyMessageVolume(req.orgId, days),
-      repo.getDailyCampaignVolume(req.orgId, days),
-      repo.getTopTemplates(req.orgId, 8),
-      repo.getCampaignPerformance(req.orgId, 8),
-    ]);
+    const stats = await repo.getOverviewStats(req.orgId);
+    const funnel = await repo.getCampaignFunnelStats(req.orgId);
+    const dailyMessages = await repo.getDailyMessageVolume(req.orgId, days);
+    const dailyCampaigns = await repo.getDailyCampaignVolume(req.orgId, days);
+    const templates = await repo.getTopTemplates(req.orgId, 8);
+    const campaigns = await repo.getCampaignPerformance(req.orgId, 8);
+    
     res.json({ stats, funnel, dailyMessages, dailyCampaigns, templates, campaigns });
   } catch (err) {
     console.error('[analytics:all]', err);

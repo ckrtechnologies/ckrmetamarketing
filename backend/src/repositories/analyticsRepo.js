@@ -3,15 +3,19 @@ const supabase = require('../utils/supabase');
 // ── Overview Stats ─────────────────────────────────────────────
 
 async function getOverviewStats(org_id) {
-  const [campaigns, contacts, conversations, messages] = await Promise.all([
+  const [campaigns, contacts, conversations] = await Promise.all([
     supabase.from('campaigns').select('id, status, total_recipients', { count: 'exact' }).eq('org_id', org_id),
     supabase.from('contacts').select('id', { count: 'exact' }).eq('org_id', org_id),
     supabase.from('conversations').select('id, status', { count: 'exact' }).eq('org_id', org_id),
-    supabase.from('messages').select('id, direction', { count: 'exact' })
-      .in('conversation_id',
-        (await supabase.from('conversations').select('id').eq('org_id', org_id)).data?.map(c => c.id) || []
-      ),
   ]);
+
+  const convIds = (conversations.data || []).map(c => c.id);
+  let total_messages = 0;
+  for (let i = 0; i < convIds.length; i += 50) {
+    const chunk = convIds.slice(i, i + 50);
+    const { count } = await supabase.from('messages').select('id', { count: 'exact', head: true }).in('conversation_id', chunk);
+    total_messages += (count || 0);
+  }
 
   const campaignData = campaigns.data || [];
   const totalRecipients = campaignData.reduce((s, c) => s + (c.total_recipients || 0), 0);
@@ -23,7 +27,7 @@ async function getOverviewStats(org_id) {
     total_contacts:     contacts.count || 0,
     total_conversations:conversations.count || 0,
     open_conversations: (conversations.data || []).filter(c => c.status === 'open').length,
-    total_messages:     messages.count || 0,
+    total_messages,
     total_recipients:   totalRecipients,
   };
 }
@@ -31,29 +35,28 @@ async function getOverviewStats(org_id) {
 // ── Campaign Funnel (aggregate all campaigns) ──────────────────
 
 async function getCampaignFunnelStats(org_id, { campaign_id } = {}) {
-  let query = supabase
-    .from('campaign_recipients')
-    .select('status');
+  let allData = [];
 
   if (campaign_id) {
-    query = query.eq('campaign_id', campaign_id);
+    const { data, error } = await supabase.from('campaign_recipients').select('status').eq('campaign_id', campaign_id);
+    if (error) throw error;
+    allData = data || [];
   } else {
-    // Get all campaign IDs for this org
-    const { data: campaignIds } = await supabase
-      .from('campaigns')
-      .select('id')
-      .eq('org_id', org_id);
+    const { data: campaignIds } = await supabase.from('campaigns').select('id').eq('org_id', org_id);
     const ids = (campaignIds || []).map(c => c.id);
     if (ids.length === 0) return { pending: 0, sent: 0, delivered: 0, read: 0, failed: 0, total: 0 };
-    query = query.in('campaign_id', ids);
+    
+    for (let i = 0; i < ids.length; i += 50) {
+      const chunk = ids.slice(i, i + 50);
+      const { data, error } = await supabase.from('campaign_recipients').select('status').in('campaign_id', chunk);
+      if (error) throw error;
+      if (data) allData.push(...data);
+    }
   }
 
-  const { data, error } = await query;
-  if (error) throw error;
-
   const counts = { pending: 0, sent: 0, delivered: 0, read: 0, failed: 0 };
-  for (const r of (data || [])) counts[r.status] = (counts[r.status] || 0) + 1;
-  counts.total = (data || []).length;
+  for (const r of allData) counts[r.status] = (counts[r.status] || 0) + 1;
+  counts.total = allData.length;
 
   // Delivery and read rates
   counts.delivery_rate = counts.total > 0 ? +((counts.delivered + counts.read) / counts.total * 100).toFixed(1) : 0;
@@ -75,14 +78,20 @@ async function getDailyMessageVolume(org_id, days = 14) {
   const ids = (convIds || []).map(c => c.id);
   if (ids.length === 0) return [];
 
-  const { data, error } = await supabase
-    .from('messages')
-    .select('direction, sent_at')
-    .in('conversation_id', ids)
-    .gte('sent_at', since)
-    .order('sent_at', { ascending: true });
-
-  if (error) throw error;
+  const data = [];
+  for (let i = 0; i < ids.length; i += 50) {
+    const chunk = ids.slice(i, i + 50);
+    const { data: chunkData, error } = await supabase
+      .from('messages')
+      .select('direction, sent_at')
+      .in('conversation_id', chunk)
+      .gte('sent_at', since);
+    if (error) throw error;
+    if (chunkData) data.push(...chunkData);
+  }
+  
+  // Sort manually since we chunked
+  data.sort((a, b) => new Date(a.sent_at) - new Date(b.sent_at));
 
   // Group by date
   const byDate = {};
@@ -114,17 +123,21 @@ async function getDailyCampaignVolume(org_id, days = 14) {
   const ids = (campaignIds || []).map(c => c.id);
   if (ids.length === 0) return [];
 
-  const { data, error } = await supabase
-    .from('campaign_recipients')
-    .select('status, sent_at')
-    .in('campaign_id', ids)
-    .gte('sent_at', since)
-    .not('sent_at', 'is', null);
-
-  if (error) throw error;
+  const allData = [];
+  for (let i = 0; i < ids.length; i += 50) {
+    const chunk = ids.slice(i, i + 50);
+    const { data, error } = await supabase
+      .from('campaign_recipients')
+      .select('status, sent_at')
+      .in('campaign_id', chunk)
+      .gte('sent_at', since)
+      .not('sent_at', 'is', null);
+    if (error) throw error;
+    if (data) allData.push(...data);
+  }
 
   const byDate = {};
-  for (const r of (data || [])) {
+  for (const r of allData) {
     const day = r.sent_at.split('T')[0];
     if (!byDate[day]) byDate[day] = { date: day, sent: 0, delivered: 0, read: 0, failed: 0 };
     if (r.status === 'sent')      byDate[day].sent++;
@@ -164,10 +177,16 @@ async function getTopTemplates(org_id, limit = 10) {
 
   // Enrich with delivery stats
   const ids = campaignIds.map(c => c.id);
-  const { data: recipients } = await supabase
-    .from('campaign_recipients')
-    .select('campaign_id, status')
-    .in('campaign_id', ids);
+  const recipients = [];
+  for (let i = 0; i < ids.length; i += 50) {
+    const chunk = ids.slice(i, i + 50);
+    const { data, error } = await supabase
+      .from('campaign_recipients')
+      .select('campaign_id, status')
+      .in('campaign_id', chunk);
+    if (error) throw error;
+    if (data) recipients.push(...data);
+  }
 
   const campaignToTemplate = {};
   for (const c of campaignIds) campaignToTemplate[c.id] = c.template_name;
@@ -206,13 +225,19 @@ async function getCampaignPerformance(org_id, limit = 10) {
   if (!campaigns?.length) return [];
 
   const ids = campaigns.map(c => c.id);
-  const { data: recipients } = await supabase
-    .from('campaign_recipients')
-    .select('campaign_id, status')
-    .in('campaign_id', ids);
+  const recipients = [];
+  for (let i = 0; i < ids.length; i += 50) {
+    const chunk = ids.slice(i, i + 50);
+    const { data, error: rError } = await supabase
+      .from('campaign_recipients')
+      .select('campaign_id, status')
+      .in('campaign_id', chunk);
+    if (rError) throw rError;
+    if (data) recipients.push(...data);
+  }
 
   const statsById = {};
-  for (const r of (recipients || [])) {
+  for (const r of recipients) {
     if (!statsById[r.campaign_id]) statsById[r.campaign_id] = { sent: 0, delivered: 0, read: 0, failed: 0 };
     statsById[r.campaign_id][r.status] = (statsById[r.campaign_id][r.status] || 0) + 1;
   }

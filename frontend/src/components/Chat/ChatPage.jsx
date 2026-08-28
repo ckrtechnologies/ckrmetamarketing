@@ -4,7 +4,7 @@ import { io } from 'socket.io-client';
 import {
   listConversations, getConversation, sendReply, sendMediaReply, sendTemplateInChat, startConversation, closeConversation
 } from '../../api/chat.js';
-import { listContacts } from '../../api/contacts.js';
+import { listContacts, listGroups, listTags } from '../../api/contacts.js';
 import { listWabaAccounts, getWabaTemplates } from '../../api/waba.js';
 import './Chat.css';
 
@@ -65,15 +65,31 @@ export default function ChatPage({ user }) {
   const [searchParams, setSearchParams] = useSearchParams();
 
   const [conversations, setConversations] = useState([]);
+  const [wabas,         setWabas]         = useState([]);
+  const [groups,        setGroups]        = useState([]);
+  const [tags,          setTags]          = useState([]);
   const [total,         setTotal]         = useState(0);
   const [activeConv,    setActiveConv]    = useState(null);
   const [messages,      setMessages]      = useState([]);
   const [text,          setText]          = useState('');
   const [sending,       setSending]       = useState(false);
   const [loading,       setLoading]       = useState(true);
+  const [loadingMore,   setLoadingMore]   = useState(false);
   const [loadingMsgs,   setLoadingMsgs]   = useState(false);
+
+  // Filters State
   const [search,        setSearch]        = useState('');
   const [statusFilter,  setStatusFilter]  = useState('');
+  const [wabaFilter,    setWabaFilter]    = useState('');
+  const [windowFilter,  setWindowFilter]  = useState('');
+  const [datePreset,    setDatePreset]    = useState('');
+  const [dateFrom,      setDateFrom]      = useState('');
+  const [dateTo,        setDateTo]        = useState('');
+  const [templateFilter,setTemplateFilter]= useState('');
+  const [groupFilter,   setGroupFilter]   = useState('');
+  const [tagFilter,     setTagFilter]     = useState('');
+  const [showFilterModal, setShowFilterModal] = useState(false);
+
   const [windowExpired, setWindowExpired] = useState(false);
 
   // Attachments
@@ -96,7 +112,94 @@ export default function ChatPage({ user }) {
   const messagesEndRef  = useRef(null);
   const socketRef = useRef(null);
 
-  useEffect(() => { loadConversations(); }, [search, statusFilter]);
+  useEffect(() => {
+    loadConversations(true);
+    loadMetadata();
+  }, [
+    search,
+    statusFilter,
+    wabaFilter,
+    windowFilter,
+    datePreset,
+    dateFrom,
+    dateTo,
+    templateFilter,
+    groupFilter,
+    tagFilter
+  ]);
+
+  async function loadMetadata() {
+    try {
+      const [wabaData, groupsData, tagsData] = await Promise.allSettled([
+        listWabaAccounts(),
+        listGroups(),
+        listTags(),
+      ]);
+      if (wabaData.status === 'fulfilled') setWabas(wabaData.value.accounts || []);
+      if (groupsData.status === 'fulfilled') setGroups(groupsData.value.groups || []);
+      if (tagsData.status === 'fulfilled') setTags(tagsData.value.tags || []);
+    } catch (e) {}
+  }
+
+  function getFilterParams() {
+    const params = {};
+    if (search) params.search = search;
+    if (statusFilter) params.status = statusFilter;
+    if (wabaFilter) params.waba_id = wabaFilter;
+    if (windowFilter) params.window_status = windowFilter;
+    if (templateFilter) params.template_name = templateFilter;
+    if (groupFilter) params.group_id = groupFilter;
+    if (tagFilter) params.tag = tagFilter;
+
+    if (datePreset === 'today') {
+      const start = new Date();
+      start.setHours(0, 0, 0, 0);
+      params.date_from = start.toISOString();
+    } else if (datePreset === 'yesterday') {
+      const start = new Date();
+      start.setDate(start.getDate() - 1);
+      start.setHours(0, 0, 0, 0);
+      const end = new Date();
+      end.setDate(end.getDate() - 1);
+      end.setHours(23, 59, 59, 999);
+      params.date_from = start.toISOString();
+      params.date_to = end.toISOString();
+    } else if (datePreset === 'last7') {
+      const start = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+      params.date_from = start.toISOString();
+    } else if (datePreset === 'last30') {
+      const start = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+      params.date_from = start.toISOString();
+    } else if (datePreset === 'custom') {
+      if (dateFrom) params.date_from = new Date(dateFrom).toISOString();
+      if (dateTo) {
+        const end = new Date(dateTo);
+        end.setHours(23, 59, 59, 999);
+        params.date_to = end.toISOString();
+      }
+    }
+    return params;
+  }
+
+  function clearAllFilters() {
+    setWabaFilter('');
+    setWindowFilter('');
+    setDatePreset('');
+    setDateFrom('');
+    setDateTo('');
+    setTemplateFilter('');
+    setGroupFilter('');
+    setTagFilter('');
+  }
+
+  const activeFiltersCount = [
+    wabaFilter,
+    windowFilter,
+    datePreset,
+    templateFilter,
+    groupFilter,
+    tagFilter
+  ].filter(Boolean).length;
 
   // Handle URL query parameters e.g. /chat?phone=917982296878&name=Priya
   useEffect(() => {
@@ -166,16 +269,48 @@ export default function ChatPage({ user }) {
     };
   }, [user]);
 
-  async function loadConversations() {
+  async function loadConversations(reset = false) {
     try {
-      const params = { limit: 50 };
-      if (search) params.search = search;
-      if (statusFilter) params.status = statusFilter;
+      if (reset) setLoading(true);
+      const params = { limit: 50, offset: 0, ...getFilterParams() };
       const data = await listConversations(params);
       setConversations(data.conversations || []);
       setTotal(data.total || 0);
-    } catch (e) {}
-    finally { setLoading(false); }
+    } catch (e) {
+      console.error('[loadConversations]', e);
+    } finally {
+      if (reset) setLoading(false);
+    }
+  }
+
+  async function loadMoreConversations() {
+    if (loading || loadingMore || conversations.length >= total) return;
+    try {
+      setLoadingMore(true);
+      const params = { limit: 50, offset: conversations.length, ...getFilterParams() };
+      const data = await listConversations(params);
+      if (data.conversations && data.conversations.length > 0) {
+        setConversations(prev => {
+          const existingIds = new Set(prev.map(c => c.id));
+          const nextItems = data.conversations.filter(c => !existingIds.has(c.id));
+          return [...prev, ...nextItems];
+        });
+      }
+      if (typeof data.total === 'number') {
+        setTotal(data.total);
+      }
+    } catch (e) {
+      console.error('[loadMoreConversations]', e);
+    } finally {
+      setLoadingMore(false);
+    }
+  }
+
+  function handleSidebarScroll(e) {
+    const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
+    if (scrollHeight - scrollTop - clientHeight < 100) {
+      loadMoreConversations();
+    }
   }
 
   async function startAndOpenChat(phone, name) {
@@ -461,17 +596,26 @@ export default function ChatPage({ user }) {
           </button>
         </div>
 
-        <div className="chat-sidebar__search">
-          <input
-            type="text"
-            placeholder="🔍 Search conversations..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-          />
+        <div className="chat-sidebar__search-row">
+          <div className="chat-sidebar__search">
+            <input
+              type="text"
+              placeholder="🔍 Search name or phone..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
+          </div>
+          <button
+            className={`chat-filter-toggle-btn${activeFiltersCount > 0 ? ' chat-filter-toggle-btn--active' : ''}`}
+            onClick={() => setShowFilterModal(true)}
+            title="Advanced Filters"
+          >
+            ⚙️ Filters {activeFiltersCount > 0 && <span className="filter-count-badge">{activeFiltersCount}</span>}
+          </button>
         </div>
 
         <div className="chat-sidebar__filter">
-          {['', 'open', 'closed'].map(s => (
+          {['', 'unread', 'open', 'closed'].map(s => (
             <button
               key={s}
               className={`chat-filter-btn${statusFilter === s ? ' chat-filter-btn--active' : ''}`}
@@ -482,7 +626,50 @@ export default function ChatPage({ user }) {
           ))}
         </div>
 
-        <div className="chat-sidebar__list">
+        {/* Active Filter Chips Bar */}
+        {activeFiltersCount > 0 && (
+          <div className="chat-active-filters">
+            {wabaFilter && (
+              <span className="filter-chip">
+                📱 {wabas.find(w => w.id === wabaFilter)?.display_name || 'WABA'}
+                <button onClick={() => setWabaFilter('')}>✕</button>
+              </span>
+            )}
+            {windowFilter && (
+              <span className="filter-chip">
+                {windowFilter === 'open' ? '🟢 24h Open' : '🔴 Closed'}
+                <button onClick={() => setWindowFilter('')}>✕</button>
+              </span>
+            )}
+            {datePreset && (
+              <span className="filter-chip">
+                📅 {datePreset === 'today' ? 'Today' : datePreset === 'yesterday' ? 'Yesterday' : datePreset === 'last7' ? 'Last 7d' : datePreset === 'last30' ? 'Last 30d' : 'Custom Dates'}
+                <button onClick={() => { setDatePreset(''); setDateFrom(''); setDateTo(''); }}>✕</button>
+              </span>
+            )}
+            {groupFilter && (
+              <span className="filter-chip">
+                👥 {groups.find(g => g.id === groupFilter)?.name || 'Group'}
+                <button onClick={() => setGroupFilter('')}>✕</button>
+              </span>
+            )}
+            {tagFilter && (
+              <span className="filter-chip">
+                🏷️ {tagFilter}
+                <button onClick={() => setTagFilter('')}>✕</button>
+              </span>
+            )}
+            {templateFilter && (
+              <span className="filter-chip">
+                📄 {templateFilter}
+                <button onClick={() => setTemplateFilter('')}>✕</button>
+              </span>
+            )}
+            <button className="filter-clear-all" onClick={clearAllFilters}>Clear all</button>
+          </div>
+        )}
+
+        <div className="chat-sidebar__list" onScroll={handleSidebarScroll}>
           {loading ? (
             <div className="loading-center" style={{ padding: 40 }}><div className="spinner" /></div>
           ) : conversations.length === 0 ? (
@@ -494,37 +681,71 @@ export default function ChatPage({ user }) {
               </div>
             </div>
           ) : (
-            conversations.map(c => {
-              const isActive = activeConv?.id === c.id;
-              const open = isWindowOpen(c);
-              const initial = (c.customer_name || c.customer_phone || 'U').charAt(0).toUpperCase();
+            <>
+              {conversations.map(c => {
+                const isActive = activeConv?.id === c.id;
+                const isUnread = (c.unread_count || 0) > 0;
+                const open = isWindowOpen(c);
+                const initial = (c.customer_name || c.customer_phone || 'U').charAt(0).toUpperCase();
 
-              return (
-                <div
-                  key={c.id}
-                  className={`conv-item${isActive ? ' conv-item--active' : ''}`}
-                  onClick={() => openConversation(c)}
-                >
-                  <div className="conv-avatar">{initial}</div>
-                  <div className="conv-info">
-                    <div className="conv-top">
-                      <span className="conv-name">{c.customer_name || formatPhoneDisplay(c.customer_phone)}</span>
-                      <span className="conv-time">{timeAgo(c.last_message_at || c.created_at)}</span>
+                return (
+                  <div
+                    key={c.id}
+                    className={`conv-item${isActive ? ' conv-item--active' : ''}${isUnread ? ' conv-item--unread' : ''}`}
+                    onClick={() => openConversation(c)}
+                  >
+                    <div className="conv-avatar">
+                      {initial}
+                      {isUnread && <span className="conv-avatar__unread-dot" title="Unread messages" />}
                     </div>
-                    <div className="conv-phone">{formatPhoneDisplay(c.customer_phone)}</div>
-                    <div className="conv-bottom">
-                      <span className="conv-preview">{c.last_message || '—'}</span>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
-                        {open && <span className="window-pill window-pill--open">24h</span>}
-                        {c.unread_count > 0 && (
-                          <span className="conv-badge">{c.unread_count}</span>
-                        )}
+                    <div className="conv-info">
+                      <div className="conv-top">
+                        <div style={{ display: 'flex', flexDirection: 'column' }}>
+                          <span className="conv-item__name">
+                            {c.customer_name || 'Unknown'}
+                          </span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
+                            <span className="conv-item__phone">{formatPhoneDisplay(c.customer_phone)}</span>
+                            {wabas.length > 1 && c.waba_id && (
+                              <span style={{ fontSize: 9, padding: '2px 4px', background: 'rgba(255,255,255,0.1)', borderRadius: 4, color: 'var(--clr-text-2)' }}>
+                                {wabas.find(w => w.id === c.waba_id)?.display_name || 'Unknown WABA'}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <span className="conv-time">{timeAgo(c.last_message_at || c.created_at)}</span>
+                      </div>
+                      <div className="conv-bottom">
+                        <span className="conv-preview">{c.last_message || '—'}</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+                          {open && <span className="window-pill window-pill--open">24h</span>}
+                          {isUnread && (
+                            <span className="conv-badge">{c.unread_count}</span>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>
+                );
+              })}
+              {loadingMore && (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px 0', gap: 8, color: 'var(--clr-text-3)', fontSize: 12 }}>
+                  <div className="spinner" style={{ width: 18, height: 18, borderWidth: 2 }} />
+                  <span>Loading older chats...</span>
                 </div>
-              );
-            })
+              )}
+              {!loadingMore && conversations.length < total && (
+                <div style={{ textAlign: 'center', padding: '12px 0' }}>
+                  <button 
+                    className="btn btn--ghost btn--sm" 
+                    style={{ fontSize: 11, color: 'var(--clr-text-3)' }}
+                    onClick={loadMoreConversations}
+                  >
+                    Load More ({conversations.length} of {total})
+                  </button>
+                </div>
+              )}
+            </>
           )}
         </div>
       </aside>
@@ -799,6 +1020,169 @@ export default function ChatPage({ user }) {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal: Advanced Chat Filters ── */}
+      {showFilterModal && (
+        <div className="modal-overlay" onClick={() => setShowFilterModal(false)}>
+          <div className="modal-box filter-modal-box" onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+              <div className="modal-title" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span>🔍</span> Filter Conversations
+              </div>
+              <button className="btn btn--ghost btn--sm" onClick={() => setShowFilterModal(false)}>✕</button>
+            </div>
+
+            <div className="filter-modal-body">
+              {/* WhatsApp Number (WABA) */}
+              {wabas.length > 1 && (
+                <div className="form-group" style={{ marginBottom: 14 }}>
+                  <label className="form-label">📱 WhatsApp Number (WABA)</label>
+                  <select
+                    className="form-input"
+                    value={wabaFilter}
+                    onChange={e => setWabaFilter(e.target.value)}
+                  >
+                    <option value="">All WhatsApp Numbers</option>
+                    {wabas.map(w => (
+                      <option key={w.id} value={w.id}>
+                        {w.display_name || w.display_number} ({w.display_number})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* 24-Hour Service Window */}
+              <div className="form-group" style={{ marginBottom: 14 }}>
+                <label className="form-label">⏱️ 24-Hour Service Window</label>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+                  {[
+                    { val: '', label: 'All' },
+                    { val: 'open', label: '🟢 24h Open' },
+                    { val: 'expired', label: '🔴 Closed' },
+                  ].map(item => (
+                    <button
+                      key={item.val}
+                      type="button"
+                      className={`btn btn--sm ${windowFilter === item.val ? 'btn--primary' : 'btn--secondary'}`}
+                      onClick={() => setWindowFilter(item.val)}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Activity / Date Range */}
+              <div className="form-group" style={{ marginBottom: 14 }}>
+                <label className="form-label">📅 Activity Date Range</label>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+                  {[
+                    { val: '', label: 'Any time' },
+                    { val: 'today', label: 'Today' },
+                    { val: 'yesterday', label: 'Yesterday' },
+                    { val: 'last7', label: 'Last 7 Days' },
+                    { val: 'last30', label: 'Last 30 Days' },
+                    { val: 'custom', label: 'Custom' },
+                  ].map(item => (
+                    <button
+                      key={item.val}
+                      type="button"
+                      className={`chat-filter-btn ${datePreset === item.val ? 'chat-filter-btn--active' : ''}`}
+                      onClick={() => setDatePreset(item.val)}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+
+                {datePreset === 'custom' && (
+                  <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                    <div style={{ flex: 1 }}>
+                      <span style={{ fontSize: 11, color: 'var(--clr-text-3)' }}>From:</span>
+                      <input
+                        type="date"
+                        className="form-input"
+                        value={dateFrom}
+                        onChange={e => setDateFrom(e.target.value)}
+                      />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <span style={{ fontSize: 11, color: 'var(--clr-text-3)' }}>To:</span>
+                      <input
+                        type="date"
+                        className="form-input"
+                        value={dateTo}
+                        onChange={e => setDateTo(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Contact Groups & Tags */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
+                <div className="form-group">
+                  <label className="form-label">👥 Contact Group</label>
+                  <select
+                    className="form-input"
+                    value={groupFilter}
+                    onChange={e => setGroupFilter(e.target.value)}
+                  >
+                    <option value="">All Contact Groups</option>
+                    {groups.map(g => (
+                      <option key={g.id} value={g.id}>{g.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">🏷️ Contact Tag</label>
+                  <select
+                    className="form-input"
+                    value={tagFilter}
+                    onChange={e => setTagFilter(e.target.value)}
+                  >
+                    <option value="">All Tags</option>
+                    {tags.map(t => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Campaign / Template Name */}
+              <div className="form-group" style={{ marginBottom: 14 }}>
+                <label className="form-label">📄 Campaign / Template Source</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  placeholder="e.g. rishabh_school_marketing"
+                  value={templateFilter}
+                  onChange={e => setTemplateFilter(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="modal-footer" style={{ justifyContent: 'space-between' }}>
+              <button
+                type="button"
+                className="btn btn--ghost btn--sm"
+                onClick={clearAllFilters}
+              >
+                Reset All Filters
+              </button>
+              <button
+                type="button"
+                className="btn btn--primary btn--sm"
+                onClick={() => setShowFilterModal(false)}
+              >
+                Apply Filters {activeFiltersCount > 0 && `(${activeFiltersCount})`}
+              </button>
+            </div>
           </div>
         </div>
       )}
