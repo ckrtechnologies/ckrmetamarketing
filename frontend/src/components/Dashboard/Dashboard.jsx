@@ -75,7 +75,7 @@ export default function Dashboard({ user, org }) {
       <div className="stat-grid" style={{ marginBottom: 16 }}>
         {[
           { label: 'Delivery Rate', value: `${funnel.delivery_rate ?? 0}%`, color: '#059669', bg: '#ecfdf5', icon: '✅', sub: `${(funnel.delivered || 0).toLocaleString()} delivered` },
-          { label: 'Read Rate',     value: `${funnel.read_rate ?? 0}%`,     color: '#00a884', bg: '#e6f7f3', icon: '👁', sub: `${(funnel.read || 0).toLocaleString()} read` },
+          { label: 'Delivered',     value: (funnel.delivered || 0).toLocaleString(), color: '#00a884', bg: '#e6f7f3', icon: '📬', sub: 'verified delivered' },
           { label: 'Failed',        value: (funnel.failed || 0).toLocaleString(), color: '#dc2626', bg: '#fef2f2', icon: '❌', sub: 'delivery failures' },
           { label: 'Active Now',    value: stats.active_campaigns || 0, color: '#d97706', bg: '#fffbeb', icon: '⚡', sub: 'campaigns running' },
         ].map(s => (
@@ -139,7 +139,7 @@ export default function Dashboard({ user, org }) {
           { icon: '📣', title: 'New Campaign', desc: 'Broadcast WhatsApp templates to contact lists', href: '/campaigns', btn: 'Launch', color: '#059669', bg: '#ecfdf5' },
           { icon: '👥', title: 'Manage Contacts', desc: 'Import CSV lists or organize tags & groups', href: '/contacts', btn: 'Contacts', color: '#2563eb', bg: '#eff6ff' },
           { icon: '💬', title: 'Live Chat', desc: 'Respond to incoming customer inquiries live', href: '/chat', btn: 'Open Inbox', color: '#00a884', bg: '#e6f7f3' },
-          { icon: '📈', title: 'Analytics', desc: 'Detailed delivery, read rates, and error logs', href: '/reports', btn: 'Reports', color: '#d97706', bg: '#fffbeb' },
+          { icon: '📈', title: 'Analytics', desc: 'Detailed delivery reports and campaign logs', href: '/reports', btn: 'Reports', color: '#d97706', bg: '#fffbeb' },
         ].map(q => (
           <div key={q.title} className="card" style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '12px 14px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>

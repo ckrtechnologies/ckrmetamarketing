@@ -16,7 +16,7 @@ function timeAgo(dateStr) {
   const d = new Date(dateStr);
   const now = new Date();
   const diff = Math.floor((now - d) / 1000);
-  if (diff < 60)   return 'just now';
+  if (diff < 60) return 'just now';
   if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
   if (diff < 86400) return d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
   return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
@@ -70,9 +70,10 @@ function formatPhoneDisplay(phone) {
 }
 
 function MessageStatusIcon({ status }) {
-  if (status === 'sent') return <span className="msg-status" style={{color: '#999'}}>✓</span>;
-  if (status === 'delivered' || status === 'read') return <span className="msg-status" style={{color: '#059669', fontWeight: 600}}>✓✓</span>;
-  if (status === 'failed') return <span className="msg-status" style={{color: 'var(--clr-danger)'}}>✕</span>;
+  if (status === 'sent') return <span className="msg-status" style={{ color: '#999' }}>✓</span>;
+  if (status === 'delivered') return <span className="msg-status" style={{ color: '#999' }}>✓✓</span>;
+  if (status === 'read') return <span className="msg-status" style={{ color: '#53bdeb' }}>✓✓</span>;
+  if (status === 'failed') return <span className="msg-status" style={{ color: 'var(--clr-danger)' }}>✕</span>;
   return null;
 }
 
@@ -81,29 +82,29 @@ export default function ChatPage({ user, org }) {
   const [searchParams, setSearchParams] = useSearchParams();
 
   const [conversations, setConversations] = useState([]);
-  const [wabas,         setWabas]         = useState([]);
-  const [groups,        setGroups]        = useState([]);
-  const [tags,          setTags]          = useState([]);
-  const [total,         setTotal]         = useState(0);
-  const [activeConv,    setActiveConv]    = useState(null);
-  const [messages,      setMessages]      = useState([]);
-  const [text,          setText]          = useState('');
-  const [sending,       setSending]       = useState(false);
-  const [loading,       setLoading]       = useState(true);
-  const [loadingMore,   setLoadingMore]   = useState(false);
-  const [loadingMsgs,   setLoadingMsgs]   = useState(false);
+  const [wabas, setWabas] = useState([]);
+  const [groups, setGroups] = useState([]);
+  const [tags, setTags] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [activeConv, setActiveConv] = useState(null);
+  const [messages, setMessages] = useState([]);
+  const [text, setText] = useState('');
+  const [sending, setSending] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [loadingMsgs, setLoadingMsgs] = useState(false);
 
   // Filters State
-  const [search,        setSearch]        = useState('');
-  const [statusFilter,  setStatusFilter]  = useState('');
-  const [wabaFilter,    setWabaFilter]    = useState('');
-  const [windowFilter,  setWindowFilter]  = useState('');
-  const [datePreset,    setDatePreset]    = useState('');
-  const [dateFrom,      setDateFrom]      = useState('');
-  const [dateTo,        setDateTo]        = useState('');
-  const [templateFilter,setTemplateFilter]= useState('');
-  const [groupFilter,   setGroupFilter]   = useState('');
-  const [tagFilter,     setTagFilter]     = useState('');
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [wabaFilter, setWabaFilter] = useState('');
+  const [windowFilter, setWindowFilter] = useState('');
+  const [datePreset, setDatePreset] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [templateFilter, setTemplateFilter] = useState('');
+  const [groupFilter, setGroupFilter] = useState('');
+  const [tagFilter, setTagFilter] = useState('');
   const [showFilterModal, setShowFilterModal] = useState(false);
 
   const [windowExpired, setWindowExpired] = useState(false);
@@ -114,9 +115,9 @@ export default function ChatPage({ user, org }) {
 
   // New Chat Modal
   const [showNewChatModal, setShowNewChatModal] = useState(false);
-  const [allContacts,     setAllContacts]     = useState([]);
-  const [newChatPhone,    setNewChatPhone]    = useState('');
-  const [newChatName,     setNewChatName]     = useState('');
+  const [allContacts, setAllContacts] = useState([]);
+  const [newChatPhone, setNewChatPhone] = useState('');
+  const [newChatName, setNewChatName] = useState('');
 
   // Send Template Modal
   const [showTemplateModal, setShowTemplateModal] = useState(false);
@@ -125,7 +126,7 @@ export default function ChatPage({ user, org }) {
   const [templateVariables, setTemplateVariables] = useState({});
   const [sendingTemplate, setSendingTemplate] = useState(false);
 
-  const messagesEndRef  = useRef(null);
+  const messagesEndRef = useRef(null);
   const socketRef = useRef(null);
   const activeConvRef = useRef(activeConv);
 
@@ -159,7 +160,7 @@ export default function ChatPage({ user, org }) {
       if (wabaData.status === 'fulfilled') setWabas(wabaData.value.accounts || []);
       if (groupsData.status === 'fulfilled') setGroups(groupsData.value.groups || []);
       if (tagsData.status === 'fulfilled') setTags(tagsData.value.tags || []);
-    } catch (e) {}
+    } catch (e) { }
   }
 
   function getFilterParams() {
@@ -225,7 +226,7 @@ export default function ChatPage({ user, org }) {
   // Handle URL query parameters e.g. /chat?phone=917982296878&name=Priya
   useEffect(() => {
     const phoneParam = searchParams.get('phone');
-    const nameParam  = searchParams.get('name');
+    const nameParam = searchParams.get('name');
     if (phoneParam) {
       startAndOpenChat(phoneParam, nameParam);
     }
@@ -402,7 +403,7 @@ export default function ChatPage({ user, org }) {
       setConversations(prev =>
         prev.map(c => c.id === conv.id ? { ...c, ...freshConv, unread_count: 0 } : c)
       );
-    } catch (e) {}
+    } catch (e) { }
     finally { setLoadingMsgs(false); }
   }
 
@@ -421,17 +422,17 @@ export default function ChatPage({ user, org }) {
     if ((!text.trim() && !attachment) || !activeConv || sending) return;
     const draftText = text;
     const file = attachment;
-    
+
     setText('');
     setAttachment(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
-    
+
     setSending(true);
 
     const isMedia = !!file;
     const tempId = `opt-${Date.now()}`;
     let previewBody = draftText;
-    
+
     if (isMedia) {
       let mediaType = 'document';
       if (file.type.startsWith('image/')) mediaType = 'image';
@@ -457,7 +458,7 @@ export default function ChatPage({ user, org }) {
         formData.append('file', file);
         if (draftText) formData.append('caption', draftText);
         data = await sendMediaReply(activeConv.id, formData);
-        
+
         // Update optimistic body with real URL
         if (data.mediaLink) {
           const actualType = optimistic.type;
@@ -466,11 +467,11 @@ export default function ChatPage({ user, org }) {
       } else {
         data = await sendReply(activeConv.id, draftText);
       }
-      
+
       setMessages(prev => prev.map(m =>
         m.id === tempId ? { ...optimistic, id: data.message?.id || tempId, wamid: data.wamid } : m
       ));
-      
+
       setConversations(prev =>
         prev.map(c => c.id === activeConv.id ? {
           ...c,
@@ -548,7 +549,7 @@ export default function ChatPage({ user, org }) {
     try {
       const data = await listContacts({ limit: 100 });
       setAllContacts(data.contacts || []);
-    } catch (e) {}
+    } catch (e) { }
   }
 
   async function handleStartNewChat(e) {
@@ -799,8 +800,8 @@ export default function ChatPage({ user, org }) {
               )}
               {!loadingMore && conversations.length < total && (
                 <div style={{ textAlign: 'center', padding: '12px 0' }}>
-                  <button 
-                    className="btn btn--ghost btn--sm" 
+                  <button
+                    className="btn btn--ghost btn--sm"
                     style={{ fontSize: 11, color: 'var(--clr-text-3)' }}
                     onClick={loadMoreConversations}
                   >
@@ -928,7 +929,7 @@ export default function ChatPage({ user, org }) {
                     <button onClick={() => setAttachment(null)}>✕</button>
                   </div>
                   {attachment.type.startsWith('image/') && (
-                    <img src={URL.createObjectURL(attachment)} alt="Preview" style={{maxHeight: 120, borderRadius: 8, marginTop: 8}} />
+                    <img src={URL.createObjectURL(attachment)} alt="Preview" style={{ maxHeight: 120, borderRadius: 8, marginTop: 8 }} />
                   )}
                 </div>
               )}
@@ -937,22 +938,22 @@ export default function ChatPage({ user, org }) {
 
             {/* Composer Input Area */}
             <div className="chat-composer">
-              <button 
-                className="chat-attach-btn" 
+              <button
+                className="chat-attach-btn"
                 title="Attach Media"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={sending || !windowOpen}
               >
                 📎
               </button>
-              <input 
-                type="file" 
-                ref={fileInputRef} 
-                style={{display: 'none'}} 
+              <input
+                type="file"
+                ref={fileInputRef}
+                style={{ display: 'none' }}
                 onChange={handleFileSelect}
                 accept="image/*,video/*,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
               />
-              
+
               <input
                 type="text"
                 className="chat-input"

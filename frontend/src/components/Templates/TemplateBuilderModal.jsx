@@ -34,6 +34,20 @@ export default function TemplateBuilderModal({ wabaId, onClose, onSuccess }) {
   const [sampleFile, setSampleFile] = useState(null);
   const [sampleUrl, setSampleUrl] = useState('');
 
+  function handleSelectHeaderType(t) {
+    setHeaderType(t);
+    setError('');
+    if (sampleFile) {
+      const isImg = sampleFile.type?.startsWith('image/');
+      const isVid = sampleFile.type?.startsWith('video/');
+      const isDoc = sampleFile.type?.includes('pdf') || sampleFile.name?.endsWith('.pdf');
+      if (t === 'IMAGE' && !isImg) setSampleFile(null);
+      else if (t === 'VIDEO' && !isVid) setSampleFile(null);
+      else if (t === 'DOCUMENT' && !isDoc) setSampleFile(null);
+      else if (t === 'NONE' || t === 'TEXT') setSampleFile(null);
+    }
+  }
+
   const [bodyText, setBodyText] = useState('');
   const [bodyExamples, setBodyExamples] = useState({}); // { 1: "John", 2: "20%" }
 
@@ -242,7 +256,7 @@ export default function TemplateBuilderModal({ wabaId, onClose, onSuccess }) {
                   required
                 />
                 <span style={{ fontSize: 11, color: 'var(--clr-text-3)' }}>
-                  Lowercase, numbers, and underscores only
+                  Lowercase, numbers, and underscores only. Note: If name exists in Meta, use a unique name (e.g. {name || 'template'}_v2).
                 </span>
               </div>
 
@@ -295,7 +309,7 @@ export default function TemplateBuilderModal({ wabaId, onClose, onSuccess }) {
                       type="button"
                       key={t}
                       className={`btn btn--xs ${headerType === t ? 'btn--primary' : 'btn--ghost'}`}
-                      onClick={() => setHeaderType(t)}
+                      onClick={() => handleSelectHeaderType(t)}
                     >
                       {t}
                     </button>
@@ -325,9 +339,9 @@ export default function TemplateBuilderModal({ wabaId, onClose, onSuccess }) {
                       if (e.target.files?.[0]) setSampleFile(e.target.files[0]);
                     }}
                   />
-                  {sampleFile ? (
-                    <div style={{ fontSize: 11, color: '#059669', fontWeight: 600, marginTop: 4 }}>
-                      ✓ Attached: {sampleFile.name} ({(sampleFile.size / 1024).toFixed(1)} KB)
+                  {sampleFile && (sampleFile.type?.includes('pdf') || sampleFile.name?.endsWith('.pdf')) ? (
+                    <div style={{ fontSize: 11, color: '#059669', fontWeight: 600, marginTop: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span>📄</span> Attached: {sampleFile.name} ({(sampleFile.size / 1024).toFixed(1)} KB)
                     </div>
                   ) : (
                     <div style={{ fontSize: 11, color: 'var(--text-secondary, #64748b)', marginTop: 4 }}>
@@ -343,20 +357,27 @@ export default function TemplateBuilderModal({ wabaId, onClose, onSuccess }) {
                   </label>
                   <input
                     type="file"
-                    accept="image/*"
+                    accept="image/png,image/jpeg,image/webp,image/jpg"
                     className="form-input"
                     style={{ padding: '6px 10px', fontSize: 12 }}
                     onChange={e => {
                       if (e.target.files?.[0]) setSampleFile(e.target.files[0]);
                     }}
                   />
-                  {sampleFile ? (
-                    <div style={{ fontSize: 11, color: '#059669', fontWeight: 600, marginTop: 4 }}>
-                      ✓ Attached: {sampleFile.name} ({(sampleFile.size / 1024).toFixed(1)} KB)
+                  {sampleFile && sampleFile.type?.startsWith('image/') ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8 }}>
+                      <img
+                        src={URL.createObjectURL(sampleFile)}
+                        alt="Preview"
+                        style={{ width: 44, height: 44, borderRadius: 6, objectFit: 'cover', border: '1px solid #cbd5e1' }}
+                      />
+                      <div style={{ fontSize: 11, color: '#059669', fontWeight: 600 }}>
+                        ✓ Attached: {sampleFile.name} ({(sampleFile.size / 1024).toFixed(1)} KB)
+                      </div>
                     </div>
                   ) : (
                     <div style={{ fontSize: 11, color: 'var(--text-secondary, #64748b)', marginTop: 4 }}>
-                      Attach a sample image so Meta's review team can review and approve this template.
+                      Attach a sample image (JPEG or PNG, up to 5MB) so Meta's review team can review and approve this template.
                     </div>
                   )}
                 </div>
@@ -368,13 +389,22 @@ export default function TemplateBuilderModal({ wabaId, onClose, onSuccess }) {
                   </label>
                   <input
                     type="file"
-                    accept="video/*"
+                    accept="video/mp4,video/3gpp"
                     className="form-input"
                     style={{ padding: '6px 10px', fontSize: 12 }}
                     onChange={e => {
                       if (e.target.files?.[0]) setSampleFile(e.target.files[0]);
                     }}
                   />
+                  {sampleFile && sampleFile.type?.startsWith('video/') ? (
+                    <div style={{ fontSize: 11, color: '#059669', fontWeight: 600, marginTop: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span>🎬</span> Attached: {sampleFile.name} ({(sampleFile.size / (1024 * 1024)).toFixed(2)} MB)
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: 11, color: 'var(--text-secondary, #64748b)', marginTop: 4 }}>
+                      Attach a sample MP4 video (up to 16MB) so Meta's review team can review and approve this template.
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -555,6 +585,7 @@ export default function TemplateBuilderModal({ wabaId, onClose, onSuccess }) {
               name={name}
               headerType={headerType}
               headerText={headerText}
+              sampleFile={sampleFile}
               bodyText={bodyText}
               footerText={footerText}
               buttons={buttons}

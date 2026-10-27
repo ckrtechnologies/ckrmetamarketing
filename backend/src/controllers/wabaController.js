@@ -174,6 +174,15 @@ async function createTemplate(req, res) {
             if (fs.existsSync(localFile)) {
               fileBuffer = fs.readFileSync(localFile);
               fileName = path.basename(localFile);
+              const ext = path.extname(fileName).toLowerCase();
+              if (['.jpg', '.jpeg'].includes(ext)) mimeType = 'image/jpeg';
+              else if (ext === '.png') mimeType = 'image/png';
+              else if (ext === '.webp') mimeType = 'image/webp';
+              else if (ext === '.gif') mimeType = 'image/gif';
+              else if (ext === '.pdf') mimeType = 'application/pdf';
+              else if (ext === '.mp4') mimeType = 'video/mp4';
+              else if (ext === '.3gp') mimeType = 'video/3gpp';
+              else if (ext === '.mov') mimeType = 'video/quicktime';
             }
           }
 
@@ -182,7 +191,16 @@ async function createTemplate(req, res) {
               const dl = await axios.get(sampleSource, { responseType: 'arraybuffer' });
               fileBuffer = Buffer.from(dl.data);
               fileName = path.basename(new URL(sampleSource).pathname) || fileName;
-              if (dl.headers['content-type']) mimeType = dl.headers['content-type'].split(';')[0];
+              if (dl.headers['content-type']) {
+                mimeType = dl.headers['content-type'].split(';')[0];
+              } else {
+                const ext = path.extname(fileName).toLowerCase();
+                if (['.jpg', '.jpeg'].includes(ext)) mimeType = 'image/jpeg';
+                else if (ext === '.png') mimeType = 'image/png';
+                else if (ext === '.webp') mimeType = 'image/webp';
+                else if (ext === '.pdf') mimeType = 'application/pdf';
+                else if (ext === '.mp4') mimeType = 'video/mp4';
+              }
             } catch (dlErr) {
               console.warn('[createTemplate] Failed to download sample media from URL:', dlErr.message);
             }
@@ -194,6 +212,11 @@ async function createTemplate(req, res) {
           fileBuffer = Buffer.from("%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF");
           fileName = "sample.pdf";
           mimeType = "application/pdf";
+        } else if (!fileBuffer && comp.format === 'IMAGE') {
+          // Fallback 1x1 transparent PNG if no image sample was provided
+          fileBuffer = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64');
+          fileName = "sample.png";
+          mimeType = "image/png";
         }
 
         if (fileBuffer) {
@@ -202,7 +225,7 @@ async function createTemplate(req, res) {
             comp.example = {
               header_handle: [handleRes.handle]
             };
-            console.log(`[createTemplate] Successfully generated Meta header_handle for ${comp.format}`);
+            console.log(`[createTemplate] Successfully generated Meta header_handle for ${comp.format} (${fileName}, ${mimeType})`);
           } else {
             console.warn('[createTemplate] Could not generate header_handle from Meta:', handleRes.error);
           }
@@ -219,8 +242,12 @@ async function createTemplate(req, res) {
 
     const result = await metaCreateTemplate(account.waba_id, account.access_token, payload);
     if (!result.success) {
+      let errUserMsg = result.error || 'Failed to create template on Meta';
+      if (errUserMsg.includes('already English content') || errUserMsg.includes('already exists')) {
+        errUserMsg = `Template name "${cleanName}" already exists in your WhatsApp account. Please choose a different Template Name (e.g. ${cleanName}_v2) and try again.`;
+      }
       return res.status(400).json({
-        error: result.error || 'Failed to create template on Meta',
+        error: errUserMsg,
         details: result.raw
       });
     }

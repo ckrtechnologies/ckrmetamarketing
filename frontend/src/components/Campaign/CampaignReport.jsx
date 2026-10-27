@@ -2,9 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { getCampaignReport, exportCampaignCSV } from '../../api/campaigns.js';
 
 export default function CampaignReport({ campaignId, onBack }) {
-  const [data,    setData]    = useState(null);
+  const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [filter,  setFilter]  = useState('');
+  const [filter, setFilter] = useState('');
 
   const [refreshing, setRefreshing] = useState(false);
 
@@ -16,7 +16,7 @@ export default function CampaignReport({ campaignId, onBack }) {
     try {
       const d = await getCampaignReport(campaignId);
       setData(d);
-    } catch (e) {}
+    } catch (e) { }
     finally {
       setLoading(false);
       setRefreshing(false);
@@ -33,7 +33,8 @@ export default function CampaignReport({ campaignId, onBack }) {
 
   const { campaign, stats, recipients = [] } = data;
   const filtered = filter ? recipients.filter(r => (r.status || '').toLowerCase() === filter.toLowerCase()) : recipients;
-  const deliveryPct = stats.total > 0 ? Math.round(((stats.delivered || 0) + (stats.read || 0)) / stats.total * 100) : 0;
+  const deliveryPct = stats.total > 0 ? Math.round((stats.delivered / stats.total) * 100) : 0;
+  const readPct = stats.total > 0 ? Math.round((stats.read / stats.total) * 100) : 0;
 
   function fmt(d) {
     if (!d) return '—';
@@ -45,7 +46,7 @@ export default function CampaignReport({ campaignId, onBack }) {
       <div className="page-header">
         <div>
           <h1>📊 Campaign Report: {campaign.name}</h1>
-          <p>Real-time delivery status from Meta WhatsApp Cloud API</p>
+          <p>Real-time delivery & read receipts from Meta WhatsApp Cloud API</p>
         </div>
         <div className="page-header__actions">
           <button className="btn btn--secondary btn--sm" onClick={handleManualRefresh} disabled={refreshing}>
@@ -59,11 +60,12 @@ export default function CampaignReport({ campaignId, onBack }) {
       {/* Funnel KPI Row */}
       <div className="stat-grid" style={{ marginBottom: 14 }}>
         {[
-          { label: 'Total',     value: stats.total,     color: '#0f172a', bg: '#f1f5f9', filter: '' },
-          { label: 'Sent',      value: stats.sent,      color: '#2563eb', bg: '#eff6ff', filter: 'sent' },
-          { label: 'Delivered', value: (stats.delivered || 0) + (stats.read || 0), color: '#059669', bg: '#ecfdf5', filter: 'delivered', sub: `${deliveryPct}% rate` },
-          { label: 'Failed',    value: stats.failed,    color: '#dc2626', bg: '#fef2f2', filter: 'failed' },
-          { label: 'Pending',   value: stats.pending,   color: '#64748b', bg: '#f8fafc', filter: 'pending' },
+          { label: 'Total', value: stats.total, color: '#0f172a', bg: '#f1f5f9', filter: '' },
+          { label: 'Sent', value: stats.sent, color: '#2563eb', bg: '#eff6ff', filter: 'sent' },
+          { label: 'Delivered', value: stats.delivered, color: '#059669', bg: '#ecfdf5', filter: 'delivered', sub: `${deliveryPct}% rate` },
+          { label: 'Read', value: stats.read, color: '#00a884', bg: '#e6f7f3', filter: 'read', sub: `${readPct}% rate` },
+          { label: 'Failed', value: stats.failed, color: '#dc2626', bg: '#fef2f2', filter: 'failed' },
+          { label: 'Pending', value: stats.pending, color: '#64748b', bg: '#f8fafc', filter: 'pending' },
         ].map(s => (
           <div
             key={s.label}
@@ -118,13 +120,14 @@ export default function CampaignReport({ campaignId, onBack }) {
               <th className="text-center">Status</th>
               <th>Sent Time</th>
               <th>Delivered Time</th>
+              <th>Read Time</th>
               <th>Meta Error Details</th>
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan="5" style={{ textAlign: 'center', padding: '24px 12px', color: 'var(--text-muted)' }}>
+                <td colSpan="6" style={{ textAlign: 'center', padding: '24px 12px', color: 'var(--text-muted)' }}>
                   No recipients match this filter.
                 </td>
               </tr>
@@ -135,16 +138,17 @@ export default function CampaignReport({ campaignId, onBack }) {
                     +{r.phone}
                   </td>
                   <td className="text-center">
-                    <span className={`badge ${
-                      r.status === 'delivered' || r.status === 'read' ? 'badge--green' :
-                      r.status === 'sent' ? 'badge--blue' :
-                      r.status === 'failed' ? 'badge--red' : 'badge--gray'
-                    }`}>
-                      {r.status === 'read' ? 'DELIVERED' : r.status?.toUpperCase()}
+                    <span className={`badge ${r.status === 'read' ? 'badge--purple' :
+                        r.status === 'delivered' ? 'badge--green' :
+                          r.status === 'sent' ? 'badge--blue' :
+                            r.status === 'failed' ? 'badge--red' : 'badge--gray'
+                      }`}>
+                      {r.status?.toUpperCase()}
                     </span>
                   </td>
                   <td className="text-mono" style={{ fontSize: 11.5, color: 'var(--text-secondary)' }}>{fmt(r.sent_at)}</td>
-                  <td className="text-mono" style={{ fontSize: 11.5, color: 'var(--text-secondary)' }}>{fmt(r.delivered_at || r.read_at)}</td>
+                  <td className="text-mono" style={{ fontSize: 11.5, color: 'var(--text-secondary)' }}>{fmt(r.delivered_at)}</td>
+                  <td className="text-mono" style={{ fontSize: 11.5, color: 'var(--text-secondary)' }}>{fmt(r.read_at)}</td>
                   <td style={{ fontSize: 11.5, color: r.error_msg ? 'var(--clr-danger)' : 'var(--text-muted)' }}>
                     {r.error_msg || '—'}
                   </td>

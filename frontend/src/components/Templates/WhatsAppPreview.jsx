@@ -4,11 +4,23 @@ export default function WhatsAppPreview({
   name = 'Template Preview',
   headerType = 'NONE',
   headerText = '',
+  sampleFile = null,
   bodyText = '',
   footerText = '',
   buttons = [],
   variables = {},
 }) {
+  const [mediaPreviewUrl, setMediaPreviewUrl] = React.useState(null);
+
+  React.useEffect(() => {
+    if (sampleFile && sampleFile instanceof File && sampleFile.type.startsWith('image/')) {
+      const url = URL.createObjectURL(sampleFile);
+      setMediaPreviewUrl(url);
+      return () => URL.revokeObjectURL(url);
+    }
+    setMediaPreviewUrl(null);
+  }, [sampleFile]);
+
   // Replace {{1}}, {{2}} with sample values if provided
   function renderBody() {
     if (!bodyText) {
@@ -56,10 +68,34 @@ export default function WhatsAppPreview({
               <div className="wa-bubble-header-text">{headerText}</div>
             )}
             {['IMAGE', 'VIDEO', 'DOCUMENT'].includes(headerType) && (
-              <div className="wa-bubble-header-media">
-                {headerType === 'IMAGE' && '🖼️ Media Header [Image]'}
-                {headerType === 'VIDEO' && '🎥 Media Header [Video]'}
-                {headerType === 'DOCUMENT' && '📄 Media Header [PDF/Doc]'}
+              <div className="wa-bubble-header-media" style={{ padding: headerType === 'IMAGE' && mediaPreviewUrl ? 0 : undefined, overflow: 'hidden' }}>
+                {headerType === 'IMAGE' && (
+                  mediaPreviewUrl ? (
+                    <img
+                      src={mediaPreviewUrl}
+                      alt="Template Header"
+                      style={{ width: '100%', height: 140, objectFit: 'cover', display: 'block' }}
+                    />
+                  ) : (
+                    <div style={{ padding: '24px 12px', textAlign: 'center' }}>
+                      🖼️ Media Header [Image]
+                    </div>
+                  )
+                )}
+                {headerType === 'VIDEO' && (
+                  <div style={{ padding: '20px 12px', textAlign: 'center', background: '#1e293b', color: '#fff' }}>
+                    <div style={{ fontSize: 24, marginBottom: 4 }}>▶️</div>
+                    <div style={{ fontSize: 11, fontWeight: 600 }}>{sampleFile?.name || 'Media Header [Video]'}</div>
+                  </div>
+                )}
+                {headerType === 'DOCUMENT' && (
+                  <div style={{ padding: '14px 12px', display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(0,0,0,0.06)' }}>
+                    <span style={{ fontSize: 20 }}>📄</span>
+                    <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 11.5, fontWeight: 600 }}>
+                      {sampleFile?.name || 'Media Header [PDF/Doc]'}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
