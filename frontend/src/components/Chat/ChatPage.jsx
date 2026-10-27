@@ -70,10 +70,9 @@ function formatPhoneDisplay(phone) {
 }
 
 function MessageStatusIcon({ status }) {
-  if (status === 'sent')      return <span className="msg-status" style={{color: '#999'}}>✓</span>;
-  if (status === 'delivered') return <span className="msg-status" style={{color: '#999'}}>✓✓</span>;
-  if (status === 'read')      return <span className="msg-status" style={{color: '#53bdeb'}}>✓✓</span>;
-  if (status === 'failed')    return <span className="msg-status" style={{color: 'var(--clr-danger)'}}>✕</span>;
+  if (status === 'sent') return <span className="msg-status" style={{color: '#999'}}>✓</span>;
+  if (status === 'delivered' || status === 'read') return <span className="msg-status" style={{color: '#059669', fontWeight: 600}}>✓✓</span>;
+  if (status === 'failed') return <span className="msg-status" style={{color: 'var(--clr-danger)'}}>✕</span>;
   return null;
 }
 

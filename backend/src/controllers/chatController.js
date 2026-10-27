@@ -46,23 +46,6 @@ async function getConversation(req, res) {
     const msgs  = await chatRepo.getMessages(req.params.id, { limit: 100 });
     await chatRepo.markConversationRead(req.orgId, req.params.id);
 
-    // If there are inbound messages, mark the latest one as read on Meta (sends blue ticks to WhatsApp customer)
-    try {
-      const inboundMsgs = (msgs.messages || []).filter(m => m.direction === 'inbound' && m.wamid);
-      const lastInbound = inboundMsgs[inboundMsgs.length - 1];
-      if (lastInbound) {
-        const wabaAccounts = await orgRepo.getWabaAccounts(req.orgId);
-        const waba = (conv.waba_id ? wabaAccounts.find(a => a.id === conv.waba_id) : null) || wabaAccounts[0];
-        if (waba && waba.phone_number_id && waba.access_token) {
-          markMessageAsRead(waba.phone_number_id, waba.access_token, lastInbound.wamid).catch(e => {
-            console.warn('[markMessageAsRead error]', e.message);
-          });
-        }
-      }
-    } catch (readErr) {
-      console.warn('[read-receipt-sync]', readErr.message);
-    }
-
     res.json({ conversation: conv, ...msgs });
   } catch (err) { res.status(500).json({ error: err.message }); }
 }
