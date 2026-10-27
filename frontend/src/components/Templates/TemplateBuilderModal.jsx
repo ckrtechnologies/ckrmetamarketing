@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { createWabaTemplate } from '../../api/waba.js';
+import { mediaAPI } from '../../api/media.js';
 import WhatsAppPreview from './WhatsAppPreview.jsx';
 
 const LANGUAGES = [
@@ -30,6 +31,8 @@ export default function TemplateBuilderModal({ wabaId, onClose, onSuccess }) {
   // Components
   const [headerType, setHeaderType] = useState('NONE'); // NONE, TEXT, IMAGE, DOCUMENT, VIDEO
   const [headerText, setHeaderText] = useState('');
+  const [sampleFile, setSampleFile] = useState(null);
+  const [sampleUrl, setSampleUrl] = useState('');
 
   const [bodyText, setBodyText] = useState('');
   const [bodyExamples, setBodyExamples] = useState({}); // { 1: "John", 2: "20%" }
@@ -96,6 +99,25 @@ export default function TemplateBuilderModal({ wabaId, onClose, onSuccess }) {
       }
     }
 
+    // Validate buttons
+    if (buttons.length > 0 && buttonType !== 'NONE') {
+      const validButtons = buttons.filter(b => b.text && b.text.trim());
+      for (const b of validButtons) {
+        if (b.type === 'URL') {
+          if (!b.url || !b.url.trim().match(/^https?:\/\/[a-z0-9-]+(\.[a-z0-9-]+)+/i)) {
+            setError(`Button "${b.text}": Please provide a complete URL with domain (e.g. https://ckrtechnologies.in)`);
+            return;
+          }
+        }
+        if (b.type === 'PHONE_NUMBER') {
+          if (!b.phone_number || !b.phone_number.trim().match(/^\+?[0-9]{10,15}$/)) {
+            setError(`Button "${b.text}": Please provide a valid phone number with country code (e.g. +917042603342)`);
+            return;
+          }
+        }
+      }
+    }
+
     // Build components array for Meta API
     const components = [];
 
@@ -107,9 +129,33 @@ export default function TemplateBuilderModal({ wabaId, onClose, onSuccess }) {
         text: headerText.trim(),
       });
     } else if (['IMAGE', 'DOCUMENT', 'VIDEO'].includes(headerType)) {
+      setSaving(true);
+      let headerHandle = sampleUrl.trim();
+      if (sampleFile) {
+        try {
+          const uploadRes = await mediaAPI.uploadMedia(sampleFile);
+          if (uploadRes?.url) {
+            headerHandle = uploadRes.url;
+          }
+        } catch (uErr) {
+          setError('Failed to upload sample file: ' + (uErr.response?.data?.error || uErr.message));
+          setSaving(false);
+          return;
+        }
+      }
+
+      if (!headerHandle) {
+        setError(`Meta requires a sample ${headerType === 'DOCUMENT' ? 'PDF document' : headerType.toLowerCase()} for approval review. Please select a sample file below.`);
+        setSaving(false);
+        return;
+      }
+
       components.push({
         type: 'HEADER',
         format: headerType,
+        example: {
+          header_handle: [headerHandle],
+        },
       });
     }
 
@@ -265,9 +311,70 @@ export default function TemplateBuilderModal({ wabaId, onClose, onSuccess }) {
                   onChange={e => setHeaderText(e.target.value)}
                 />
               )}
-              {['IMAGE', 'DOCUMENT', 'VIDEO'].includes(headerType) && (
-                <div style={{ fontSize: 12, color: '#1e40af', padding: 8, background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 6 }}>
-                  ℹ️ Media headers require uploading the file or providing a direct public URL when creating a campaign.
+              {headerType === 'DOCUMENT' && (
+                <div style={{ marginTop: 10, padding: 12, background: 'var(--bg-subtle, #f8fafc)', border: '1px solid var(--border-default, #e2e8f0)', borderRadius: 8 }}>
+                  <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)', display: 'block', marginBottom: 4 }}>
+                    📄 Sample PDF Document * (Required by Meta for Review)
+                  </label>
+                  <input
+                    type="file"
+                    accept="application/pdf"
+                    className="form-input"
+                    style={{ padding: '6px 10px', fontSize: 12 }}
+                    onChange={e => {
+                      if (e.target.files?.[0]) setSampleFile(e.target.files[0]);
+                    }}
+                  />
+                  {sampleFile ? (
+                    <div style={{ fontSize: 11, color: '#059669', fontWeight: 600, marginTop: 4 }}>
+                      ✓ Attached: {sampleFile.name} ({(sampleFile.size / 1024).toFixed(1)} KB)
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: 11, color: 'var(--text-secondary, #64748b)', marginTop: 4 }}>
+                      Attach a sample PDF (brochure, invoice, document) so Meta's review team can review and approve this template.
+                    </div>
+                  )}
+                </div>
+              )}
+              {headerType === 'IMAGE' && (
+                <div style={{ marginTop: 10, padding: 12, background: 'var(--bg-subtle, #f8fafc)', border: '1px solid var(--border-default, #e2e8f0)', borderRadius: 8 }}>
+                  <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)', display: 'block', marginBottom: 4 }}>
+                    🖼️ Sample Header Image * (Required by Meta for Review)
+                  </label>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="form-input"
+                    style={{ padding: '6px 10px', fontSize: 12 }}
+                    onChange={e => {
+                      if (e.target.files?.[0]) setSampleFile(e.target.files[0]);
+                    }}
+                  />
+                  {sampleFile ? (
+                    <div style={{ fontSize: 11, color: '#059669', fontWeight: 600, marginTop: 4 }}>
+                      ✓ Attached: {sampleFile.name} ({(sampleFile.size / 1024).toFixed(1)} KB)
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: 11, color: 'var(--text-secondary, #64748b)', marginTop: 4 }}>
+                      Attach a sample image so Meta's review team can review and approve this template.
+                    </div>
+                  )}
+                </div>
+              )}
+              {headerType === 'VIDEO' && (
+                <div style={{ marginTop: 10, padding: 12, background: 'var(--bg-subtle, #f8fafc)', border: '1px solid var(--border-default, #e2e8f0)', borderRadius: 8 }}>
+                  <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)', display: 'block', marginBottom: 4 }}>
+                    🎥 Sample Header Video * (Required by Meta for Review)
+                  </label>
+                  <input
+                    type="file"
+                    accept="video/*"
+                    className="form-input"
+                    style={{ padding: '6px 10px', fontSize: 12 }}
+                    onChange={e => {
+                      if (e.target.files?.[0]) setSampleFile(e.target.files[0]);
+                    }}
+                  />
                 </div>
               )}
             </div>

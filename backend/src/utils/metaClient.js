@@ -25,9 +25,10 @@ async function metaCall(method, path, accessToken, data = null) {
     return { success: true, data: response.data };
   } catch (err) {
     const errData = err.response?.data?.error || {};
+    const specificDetail = errData.error_user_msg || errData.error_data?.details || errData.message || err.message;
     return {
       success: false,
-      error: errData.message || err.message,
+      error: specificDetail,
       code: errData.code,
       raw: err.response?.data,
     };
