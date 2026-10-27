@@ -1,5 +1,14 @@
+const fs = require('fs');
+const path = require('path');
+const axios = require('axios');
 const orgRepo = require('../repositories/orgRepo');
-const { getTemplates, createTemplate: metaCreateTemplate, deleteTemplate: metaDeleteTemplate } = require('../utils/metaClient');
+const { getPublicDir } = require('../utils/paths');
+const {
+  getTemplates,
+  createTemplate: metaCreateTemplate,
+  deleteTemplate: metaDeleteTemplate,
+  uploadSampleMediaHandle
+} = require('../utils/metaClient');
 
 // GET /api/v2/waba
 async function listWabaAccounts(req, res) {
@@ -147,6 +156,59 @@ async function createTemplate(req, res) {
     const accounts = await orgRepo.getWabaAccounts(req.orgId);
     const account = accounts.find(a => a.id === req.params.id);
     if (!account) return res.status(404).json({ error: 'WABA account not found' });
+
+    // Ensure media headers have a valid Meta header_handle via Resumable Upload API
+    for (const comp of components) {
+      if (comp.type === 'HEADER' && ['IMAGE', 'DOCUMENT', 'VIDEO'].includes(comp.format)) {
+        let sampleSource = comp.example?.header_handle?.[0];
+        let fileBuffer = null;
+        let fileName = comp.format === 'DOCUMENT' ? 'sample.pdf' : (comp.format === 'IMAGE' ? 'sample.jpg' : 'sample.mp4');
+        let mimeType = comp.format === 'DOCUMENT' ? 'application/pdf' : (comp.format === 'IMAGE' ? 'image/jpeg' : 'video/mp4');
+
+        if (sampleSource) {
+          const publicDir = getPublicDir();
+          const urlParts = sampleSource.split('/public/');
+          if (urlParts.length > 1) {
+            const relPath = urlParts[1];
+            const localFile = path.resolve(publicDir, relPath);
+            if (fs.existsSync(localFile)) {
+              fileBuffer = fs.readFileSync(localFile);
+              fileName = path.basename(localFile);
+            }
+          }
+
+          if (!fileBuffer && sampleSource.startsWith('http')) {
+            try {
+              const dl = await axios.get(sampleSource, { responseType: 'arraybuffer' });
+              fileBuffer = Buffer.from(dl.data);
+              fileName = path.basename(new URL(sampleSource).pathname) || fileName;
+              if (dl.headers['content-type']) mimeType = dl.headers['content-type'].split(';')[0];
+            } catch (dlErr) {
+              console.warn('[createTemplate] Failed to download sample media from URL:', dlErr.message);
+            }
+          }
+        }
+
+        // Fallback default sample PDF if user did not supply or download failed
+        if (!fileBuffer && comp.format === 'DOCUMENT') {
+          fileBuffer = Buffer.from("%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF");
+          fileName = "sample.pdf";
+          mimeType = "application/pdf";
+        }
+
+        if (fileBuffer) {
+          const handleRes = await uploadSampleMediaHandle(account.access_token, fileBuffer, fileName, mimeType);
+          if (handleRes.success && handleRes.handle) {
+            comp.example = {
+              header_handle: [handleRes.handle]
+            };
+            console.log(`[createTemplate] Successfully generated Meta header_handle for ${comp.format}`);
+          } else {
+            console.warn('[createTemplate] Could not generate header_handle from Meta:', handleRes.error);
+          }
+        }
+      }
+    }
 
     const payload = {
       name: cleanName,

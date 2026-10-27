@@ -138,6 +138,47 @@ async function markMessageAsRead(phoneNumberId, accessToken, messageId) {
   });
 }
 
+/**
+ * Upload sample media to Meta Resumable Upload API to obtain a header_handle for template review
+ */
+async function uploadSampleMediaHandle(accessToken, buffer, fileName, mimeType) {
+  try {
+    const debugRes = await axios.get(`${BASE_URL}/debug_token?input_token=${accessToken}`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    const appId = debugRes.data?.data?.app_id;
+    if (!appId) throw new Error('Could not resolve Meta App ID from access token');
+
+    const sessionRes = await axios.post(
+      `${BASE_URL}/${appId}/uploads?file_name=${encodeURIComponent(fileName)}&file_length=${buffer.length}&file_type=${encodeURIComponent(mimeType)}`,
+      null,
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+    const sessionId = sessionRes.data?.id;
+    if (!sessionId) throw new Error('Meta failed to return upload session ID');
+
+    const uploadRes = await axios.post(
+      `${BASE_URL}/${sessionId}`,
+      buffer,
+      {
+        headers: {
+          Authorization: `OAuth ${accessToken}`,
+          file_offset: '0',
+          'Content-Type': 'application/octet-stream',
+        },
+      }
+    );
+
+    const handle = uploadRes.data?.h;
+    if (!handle) throw new Error('Meta did not return handle string (h)');
+    return { success: true, handle };
+  } catch (err) {
+    console.error('[uploadSampleMediaHandle error]', err.response?.data || err.message);
+    const detail = err.response?.data?.error?.message || err.message;
+    return { success: false, error: detail };
+  }
+}
+
 module.exports = {
   metaCall,
   sendTemplate,
@@ -149,4 +190,6 @@ module.exports = {
   getMediaUrl,
   downloadMediaData,
   markMessageAsRead,
+  uploadSampleMediaHandle,
 };
+
