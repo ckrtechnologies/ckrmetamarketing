@@ -121,14 +121,16 @@ CREATE TABLE IF NOT EXISTS public.messages (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   conversation_id UUID REFERENCES public.conversations(id) ON DELETE CASCADE,
   direction       TEXT NOT NULL CHECK (direction IN ('inbound','outbound')),
-  type            TEXT DEFAULT 'text' CHECK (type IN ('text','template','image','document','audio','video')),
+  type            TEXT DEFAULT 'text' CHECK (type IN ('text','template','image','document','audio','video','sticker','location','interactive','button','reaction','contacts')),
   body            TEXT,
   template_name   TEXT,
   wamid           TEXT,
   status          TEXT DEFAULT 'sent' CHECK (status IN ('sent','delivered','read','failed')),
   sent_at         TIMESTAMPTZ DEFAULT now(),
   delivered_at    TIMESTAMPTZ,
-  read_at         TIMESTAMPTZ
+  read_at         TIMESTAMPTZ,
+  failed_at       TIMESTAMPTZ,
+  error_msg       TEXT
 );
 
 -- ── 10. Delivery Logs ───────────────────────────────────────────
@@ -153,70 +155,21 @@ CREATE TABLE IF NOT EXISTS public.audit_logs (
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
--- ── 12. Meta Ads Accounts ───────────────────────────────────────
-CREATE TABLE IF NOT EXISTS public.ad_accounts (
-  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  org_id       UUID REFERENCES public.organizations(id) ON DELETE CASCADE,
-  act_id       TEXT NOT NULL,
-  name         TEXT,
-  currency     TEXT DEFAULT 'INR',
-  timezone     TEXT DEFAULT 'Asia/Kolkata',
-  access_token TEXT,
-  is_active    BOOLEAN DEFAULT true,
-  created_at   TIMESTAMPTZ DEFAULT now(),
-  UNIQUE(org_id, act_id)
-);
-
--- ── 13. Meta Ad Campaigns ───────────────────────────────────────
-CREATE TABLE IF NOT EXISTS public.ad_campaigns (
-  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  org_id            UUID REFERENCES public.organizations(id) ON DELETE CASCADE,
-  ad_account_id     UUID REFERENCES public.ad_accounts(id) ON DELETE CASCADE,
-  meta_campaign_id  TEXT UNIQUE NOT NULL,
-  name              TEXT NOT NULL,
-  objective         TEXT,
-  status            TEXT DEFAULT 'ACTIVE',
-  daily_budget      NUMERIC,
-  lifetime_budget   NUMERIC,
-  start_time        TIMESTAMPTZ,
-  end_time          TIMESTAMPTZ,
-  created_at        TIMESTAMPTZ DEFAULT now()
-);
-
--- ── 14. Meta Ad Insights ────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS public.ad_insights (
-  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  org_id       UUID REFERENCES public.organizations(id) ON DELETE CASCADE,
-  meta_id      TEXT NOT NULL,
-  meta_id_type TEXT,
-  date_start   DATE NOT NULL,
-  date_stop    DATE NOT NULL,
-  impressions  INT DEFAULT 0,
-  clicks       INT DEFAULT 0,
-  spend        NUMERIC DEFAULT 0,
-  reach        INT DEFAULT 0,
-  ctr          NUMERIC DEFAULT 0,
-  cpc          NUMERIC DEFAULT 0,
-  cpm          NUMERIC DEFAULT 0,
-  actions      JSONB,
-  fetched_at   TIMESTAMPTZ DEFAULT now(),
-  UNIQUE(org_id, meta_id, date_start, date_stop)
-);
-
 -- ── Indexes for Performance ─────────────────────────────────────
-CREATE INDEX IF NOT EXISTS idx_contacts_org         ON public.contacts(org_id);
-CREATE INDEX IF NOT EXISTS idx_contacts_phone       ON public.contacts(phone);
-CREATE INDEX IF NOT EXISTS idx_campaigns_org        ON public.campaigns(org_id);
-CREATE INDEX IF NOT EXISTS idx_recipients_campaign  ON public.campaign_recipients(campaign_id);
-CREATE INDEX IF NOT EXISTS idx_recipients_wamid     ON public.campaign_recipients(wamid);
-CREATE INDEX IF NOT EXISTS idx_conversations_org    ON public.conversations(org_id);
-CREATE INDEX IF NOT EXISTS idx_conversations_phone  ON public.conversations(customer_phone);
-CREATE INDEX IF NOT EXISTS idx_messages_conv        ON public.messages(conversation_id);
-CREATE INDEX IF NOT EXISTS idx_messages_wamid       ON public.messages(wamid);
-CREATE INDEX IF NOT EXISTS idx_delivery_logs_wamid  ON public.delivery_logs(wamid);
-CREATE INDEX IF NOT EXISTS idx_ad_accounts_org      ON public.ad_accounts(org_id);
-CREATE INDEX IF NOT EXISTS idx_ad_campaigns_org     ON public.ad_campaigns(org_id);
-CREATE INDEX IF NOT EXISTS idx_ad_insights_org_meta ON public.ad_insights(org_id, meta_id);
+CREATE INDEX IF NOT EXISTS idx_contacts_org                 ON public.contacts(org_id);
+CREATE INDEX IF NOT EXISTS idx_contacts_phone               ON public.contacts(phone);
+CREATE INDEX IF NOT EXISTS idx_contacts_group               ON public.contacts(org_id, group_id);
+CREATE INDEX IF NOT EXISTS idx_campaigns_org                ON public.campaigns(org_id);
+CREATE INDEX IF NOT EXISTS idx_recipients_campaign          ON public.campaign_recipients(campaign_id);
+CREATE INDEX IF NOT EXISTS idx_recipients_campaign_status   ON public.campaign_recipients(campaign_id, status);
+CREATE INDEX IF NOT EXISTS idx_recipients_wamid             ON public.campaign_recipients(wamid);
+CREATE INDEX IF NOT EXISTS idx_conversations_org            ON public.conversations(org_id);
+CREATE INDEX IF NOT EXISTS idx_conversations_org_status     ON public.conversations(org_id, status, last_message_at DESC);
+CREATE INDEX IF NOT EXISTS idx_conversations_phone          ON public.conversations(customer_phone);
+CREATE INDEX IF NOT EXISTS idx_messages_conv                ON public.messages(conversation_id);
+CREATE INDEX IF NOT EXISTS idx_messages_wamid               ON public.messages(wamid);
+CREATE INDEX IF NOT EXISTS idx_delivery_logs_wamid          ON public.delivery_logs(wamid);
+CREATE INDEX IF NOT EXISTS idx_waba_accounts_org_active     ON public.waba_accounts(org_id, is_active);
 
 -- ── Seed Data (Default Organization & Admin) ────────────────────
 -- Default Organization: Healthy Manushya
@@ -230,9 +183,10 @@ VALUES (
 ON CONFLICT (slug) DO NOTHING;
 
 -- Default Admin User: admin@ckrtechnologies.in (Password: admin123)
+-- Valid Hex UUID: b0000000-0000-0000-0000-000000000001
 INSERT INTO public.users (id, org_id, email, name, role, password_hash)
 VALUES (
-  'u0000000-0000-0000-0000-000000000001',
+  'b0000000-0000-0000-0000-000000000001',
   'a0000000-0000-0000-0000-000000000001',
   'admin@ckrtechnologies.in',
   'Admin',
@@ -257,7 +211,7 @@ VALUES (
   '443930708804530',
   '+917814051127',
   'Healthy Manushya',
-  NULL,
+  'EAANZBQCrNrfsBSEZBZC945SLeW6Y1XN5JTkis1zgCpmFO85wUQEx2p4NZCBNnmUISsRfHWeaZAWocZCnLioENNJNLzGiowhu7og7DiUAxzcZBKzyNxLTqvfEzb897YEbzZCXTo2xvRuNgHMuFZB6TF3UZBCgL0VdMwc4ZClgE5FjlAIroxxEw2P0LlsZBxjiZCq7xHgZDZD',
   true
 )
 ON CONFLICT (phone_number_id) DO NOTHING;

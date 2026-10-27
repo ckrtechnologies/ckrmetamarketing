@@ -125,12 +125,23 @@ async function sendReply(req, res) {
     });
 
     // Update conversation last message
-    await chatRepo.upsertConversation({
+    const updatedConv = await chatRepo.upsertConversation({
       org_id: req.orgId,
       waba_id: convWaba.id,
       customer_phone: conv.customer_phone,
       last_message: `You: ${text.substring(0, 60)}`,
     });
+
+    const io = req.app.get('io');
+    if (io) {
+      const payload = {
+        conversation_id: conv.id,
+        message: msg,
+        conversation: updatedConv || conv,
+      };
+      if (req.orgId) io.to(req.orgId).emit('new_message', payload);
+      io.emit('new_message', payload);
+    }
 
     res.json({ message: msg, wamid });
   } catch (err) {
@@ -205,12 +216,23 @@ async function sendMediaReply(req, res) {
       status: 'sent',
     });
 
-    await chatRepo.upsertConversation({
+    const updatedConv = await chatRepo.upsertConversation({
       org_id: req.orgId,
       waba_id: convWaba.id,
       customer_phone: conv.customer_phone,
       last_message: `You: ${bodyStr.substring(0, 60)}`,
     });
+
+    const io = req.app.get('io');
+    if (io) {
+      const payload = {
+        conversation_id: conv.id,
+        message: msg,
+        conversation: updatedConv || conv,
+      };
+      if (req.orgId) io.to(req.orgId).emit('new_message', payload);
+      io.emit('new_message', payload);
+    }
 
     res.json({ message: msg, wamid, mediaLink });
   } catch (err) {
@@ -293,12 +315,23 @@ async function sendTemplateInChat(req, res) {
       status: 'sent',
     });
 
-    await chatRepo.upsertConversation({
+    const updatedConv = await chatRepo.upsertConversation({
       org_id: req.orgId,
       waba_id: convWaba.id,
       customer_phone: conv.customer_phone,
       last_message: `You: [Template: ${template_name}]`,
     });
+
+    const io = req.app.get('io');
+    if (io) {
+      const payload = {
+        conversation_id: conv.id,
+        message: msg,
+        conversation: updatedConv || conv,
+      };
+      if (req.orgId) io.to(req.orgId).emit('new_message', payload);
+      io.emit('new_message', payload);
+    }
 
     res.json({ message: msg, wamid });
   } catch (err) {

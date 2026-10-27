@@ -15,7 +15,6 @@ const contactRoutes  = require('./routes/contacts');
 const campaignRoutes = require('./routes/campaigns');
 const chatRoutes      = require('./routes/chat');
 const analyticsRoutes = require('./routes/analytics');
-const adsRoutes       = require('./routes/ads');
 const mediaRoutes     = require('./routes/media');
 
 const app  = express();
@@ -51,6 +50,12 @@ app.use(cors({
 // ── Body parsing ───────────────────────────────────────────────────
 app.use(express.json({ limit: '25mb' }));
 app.use(express.urlencoded({ extended: true, limit: '25mb' }));
+
+const publicDir = path.isAbsolute(process.env.PUBLIC_DIR || '')
+  ? process.env.PUBLIC_DIR
+  : path.join(__dirname, '..', process.env.PUBLIC_DIR || 'public');
+if (!fs.existsSync(publicDir)) fs.mkdirSync(publicDir, { recursive: true });
+app.use('/public', express.static(publicDir));
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 // ── Global rate limiter ────────────────────────────────────────────
@@ -72,7 +77,6 @@ app.use('/api/v2/contacts',  contactRoutes);
 app.use('/api/v2/campaigns', campaignRoutes);
 app.use('/api/v2/chat',       chatRoutes);
 app.use('/api/v2/analytics',  analyticsRoutes);
-app.use('/api/v2/ads',         adsRoutes);
 app.use('/api/v2/media',       mediaRoutes);
 
 // ── Health check ───────────────────────────────────────────────────
@@ -102,7 +106,6 @@ server.listen(PORT, () => {
   console.log(`   Listening on : http://localhost:${PORT}`);
   console.log(`   Environment  : ${process.env.NODE_ENV || 'development'}`);
   console.log(`   Supabase     : ${process.env.SUPABASE_URL ? '✅ Connected' : '⚠️  NOT SET'}`);
-  console.log(`   Meta App     : ${process.env.META_APP_ID ? '✅ SET' : '⚠️  NOT SET'}`);
   console.log(`   Verify Token : ${process.env.WHATSAPP_VERIFY_TOKEN || '⚠️  using default'}`);
   console.log(`   Socket.io    : ✅ Enabled\n`);
 });

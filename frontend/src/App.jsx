@@ -10,16 +10,9 @@ import ContactsPage  from './components/Contacts/ContactsPage.jsx';
 import CampaignList  from './components/Campaign/CampaignList.jsx';
 import ChatPage      from './components/Chat/ChatPage.jsx';
 import ReportsPage   from './components/Reports/ReportsPage.jsx';
-import AdsPage       from './components/Ads/AdsPage.jsx';
 import MediaManager  from './components/Media/MediaManager.jsx';
 
-const Placeholder = ({ name }) => (
-  <div className="card fade-in" style={{ textAlign: 'center', padding: '60px 20px' }}>
-    <div style={{ fontSize: 48, marginBottom: 12 }}>🚧</div>
-    <h2 style={{ fontFamily: 'var(--font-display)', color: 'var(--clr-text)', marginBottom: 8 }}>{name}</h2>
-    <p style={{ color: 'var(--clr-text-2)' }}>Coming soon.</p>
-  </div>
-);
+
 
 function ProtectedRoute({ user, org, title, children }) {
   if (!isLoggedIn()) return <Navigate to="/login" replace />;
@@ -77,17 +70,12 @@ export default function App() {
         } />
         <Route path="/chat" element={
           <ProtectedRoute user={user} org={org} title="Live Chat">
-            <ChatPage user={user} />
+            <ChatPage user={user} org={org} />
           </ProtectedRoute>
         } />
         <Route path="/reports" element={
           <ProtectedRoute user={user} org={org} title="Analytics">
             <ReportsPage />
-          </ProtectedRoute>
-        } />
-        <Route path="/ads" element={
-          <ProtectedRoute user={user} org={org} title="Ads Manager">
-            <AdsPage />
           </ProtectedRoute>
         } />
         <Route path="/media" element={
@@ -100,11 +88,7 @@ export default function App() {
             <WABAPage />
           </ProtectedRoute>
         } />
-        <Route path="/settings" element={
-          <ProtectedRoute user={user} org={org} title="Settings">
-            <Placeholder name="Settings — Coming Soon" />
-          </ProtectedRoute>
-        } />
+
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>

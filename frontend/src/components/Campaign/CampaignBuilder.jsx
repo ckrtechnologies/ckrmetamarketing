@@ -6,7 +6,7 @@ import './Campaign.css';
 
 const STEPS = ['📱 Sender', '📝 Template', '👥 Audience', '🚀 Review'];
 
-export default function CampaignBuilder({ onClose, onCreated }) {
+export default function CampaignBuilder({ onClose, onCreated, onSuccess }) {
   const [step,         setStep]         = useState(0);
   const [wabaAccounts, setWabaAccounts] = useState([]);
   const [templates,    setTemplates]    = useState([]);
@@ -127,7 +127,8 @@ export default function CampaignBuilder({ onClose, onCreated }) {
         group_id: form.group_id || undefined,
         variables: form.variables,
       });
-      onCreated();
+      if (typeof onCreated === 'function') onCreated();
+      else if (typeof onSuccess === 'function') onSuccess();
     } catch (err) { setError(err.message); setSaving(false); }
   }
 

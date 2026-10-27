@@ -191,11 +191,13 @@ async function handleInboundMessage(value, msg, req) {
 
   const io = req.app.get('io');
   if (io) {
-    io.to(org_id).emit('new_message', {
+    const payload = {
       conversation_id: conv.id,
       message: savedMsg,
       conversation: conv
-    });
+    };
+    if (org_id) io.to(org_id).emit('new_message', payload);
+    io.emit('new_message', payload);
   }
 }
 

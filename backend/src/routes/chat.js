@@ -3,7 +3,7 @@ const { authenticate, requireRole } = require('../middleware/auth');
 const ctrl = require('../controllers/chatController');
 
 router.get('/unread',                              authenticate, ctrl.getUnreadCount);
-router.get('/conversations',                        authenticate, ctrl.listConversations);
+router.get('/conversations',                       authenticate, ctrl.listConversations);
 router.post('/start',                              authenticate, ctrl.startConversation);
 router.get('/conversations/:id',                   authenticate, ctrl.getConversation);
 router.get('/conversations/:id/messages',          authenticate, ctrl.getMessages);

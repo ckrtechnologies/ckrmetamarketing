@@ -6,15 +6,10 @@ export default function CampaignReport({ campaignId, onBack }) {
   const [loading, setLoading] = useState(true);
   const [filter,  setFilter]  = useState('');
 
+  const [refreshing, setRefreshing] = useState(false);
+
   useEffect(() => {
     load();
-    const t = setInterval(() => {
-      // Re-fetch always, or use a ref. Since we want live updates, just fetch.
-      // The backend handles it quickly. If the campaign is done, we could clear it,
-      // but for now, just fetch unconditionally every 10s to ensure fresh data.
-      load();
-    }, 10000);
-    return () => clearInterval(t);
   }, [campaignId]);
 
   async function load() {
@@ -22,7 +17,15 @@ export default function CampaignReport({ campaignId, onBack }) {
       const d = await getCampaignReport(campaignId);
       setData(d);
     } catch (e) {}
-    finally { setLoading(false); }
+    finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }
+
+  function handleManualRefresh() {
+    setRefreshing(true);
+    load();
   }
 
   if (loading) return <div className="loading-center"><div className="spinner" /></div>;
@@ -33,85 +36,133 @@ export default function CampaignReport({ campaignId, onBack }) {
   const deliveryPct = stats.total > 0 ? Math.round((stats.delivered / stats.total) * 100) : 0;
   const readPct     = stats.total > 0 ? Math.round((stats.read / stats.total) * 100) : 0;
 
-  function fmt(d) { return d ? new Date(d).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '—'; }
+  function fmt(d) {
+    if (!d) return '—';
+    return new Date(d).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+  }
 
   return (
     <div className="fade-in">
       <div className="page-header">
         <div>
-          <h1>📊 {campaign.name}</h1>
-          <p>Delivery report — live updates every 5s</p>
+          <h1>📊 Campaign Report: {campaign.name}</h1>
+          <p>Real-time delivery & read receipts from Meta WhatsApp Cloud API</p>
         </div>
         <div className="page-header__actions">
+          <button className="btn btn--secondary btn--sm" onClick={handleManualRefresh} disabled={refreshing}>
+            {refreshing ? '⏳ Refreshing...' : '🔄 Refresh'}
+          </button>
           <a href={exportCampaignCSV(campaignId)} className="btn btn--secondary btn--sm" download>📥 Export CSV</a>
-          <button className="btn btn--ghost btn--sm" onClick={onBack}>← Back</button>
+          <button className="btn btn--ghost btn--sm" onClick={onBack}>← Back to Campaigns</button>
         </div>
       </div>
 
-      {/* Funnel stats */}
-      <div className="stat-grid" style={{ marginBottom: 24 }}>
+      {/* Funnel KPI Row */}
+      <div className="stat-grid" style={{ marginBottom: 14 }}>
         {[
-          { label: 'Total', value: stats.total,     color: 'var(--clr-text)',    filter: '' },
-          { label: 'Sent', value: stats.sent,        color: '#6366f1',            filter: 'sent' },
-          { label: 'Delivered', value: stats.delivered, color: '#22c55e',        filter: 'delivered' },
-          { label: 'Read', value: stats.read,         color: 'var(--clr-primary)', filter: 'read' },
-          { label: 'Failed', value: stats.failed,     color: 'var(--clr-danger)', filter: 'failed' },
-          { label: 'Pending', value: stats.pending,   color: '#94a3b8',           filter: 'pending' },
+          { label: 'Total',     value: stats.total,     color: '#0f172a', bg: '#f1f5f9', filter: '' },
+          { label: 'Sent',      value: stats.sent,      color: '#2563eb', bg: '#eff6ff', filter: 'sent' },
+          { label: 'Delivered', value: stats.delivered, color: '#059669', bg: '#ecfdf5', filter: 'delivered', sub: `${deliveryPct}% rate` },
+          { label: 'Read',      value: stats.read,      color: '#00a884', bg: '#e6f7f3', filter: 'read', sub: `${readPct}% rate` },
+          { label: 'Failed',    value: stats.failed,    color: '#dc2626', bg: '#fef2f2', filter: 'failed' },
+          { label: 'Pending',   value: stats.pending,   color: '#64748b', bg: '#f8fafc', filter: 'pending' },
         ].map(s => (
-          <div key={s.label} className="stat-card" style={{ cursor: 'pointer', borderColor: filter === s.filter ? s.color : '' }} onClick={() => setFilter(filter === s.filter ? '' : s.filter)}>
-            <div className="stat-card__label">{s.label}</div>
-            <div className="stat-card__value" style={{ color: s.color }}>{(s.value || 0).toLocaleString()}</div>
-            {s.label === 'Delivered' && <div className="stat-card__sub">{deliveryPct}% delivery rate</div>}
-            {s.label === 'Read' && <div className="stat-card__sub">{readPct}% read rate</div>}
+          <div
+            key={s.label}
+            className="stat-card"
+            style={{
+              cursor: 'pointer',
+              borderWidth: filter === s.filter ? '2px' : '1px',
+              borderColor: filter === s.filter ? s.color : 'var(--border-default)',
+              padding: '10px 12px'
+            }}
+            onClick={() => setFilter(filter === s.filter ? '' : s.filter)}
+          >
+            <div className="stat-card__label">
+              <span>{s.label}</span>
+              {filter === s.filter && <span style={{ fontSize: 9, color: s.color, fontWeight: 700 }}>● FILTERED</span>}
+            </div>
+            <div className="stat-card__value" style={{ color: s.color, fontSize: 20 }}>
+              {(s.value || 0).toLocaleString()}
+            </div>
+            {s.sub && <div className="stat-card__sub">{s.sub}</div>}
           </div>
         ))}
       </div>
 
       {/* Progress bar */}
       {stats.total > 0 && (
-        <div className="card" style={{ marginBottom: 20, padding: '14px 20px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, fontSize: 12, color: 'var(--clr-text-2)' }}>
-            <span>Overall Progress</span>
-            <span>{stats.total - (stats.pending || 0)} / {stats.total} processed</span>
+        <div className="card" style={{ marginBottom: 14, padding: '10px 14px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6, fontSize: 11.5, color: 'var(--text-secondary)' }}>
+            <span style={{ fontWeight: 600 }}>Delivery Progress</span>
+            <span className="text-mono">{stats.total - (stats.pending || 0)} / {stats.total} processed ({deliveryPct}%)</span>
           </div>
-          <div style={{ height: 10, background: 'rgba(255,255,255,0.06)', borderRadius: 10, overflow: 'hidden' }}>
-            <div style={{ height: '100%', width: `${deliveryPct}%`, background: 'linear-gradient(90deg, var(--clr-primary-dk), var(--clr-primary))', borderRadius: 10, transition: 'width 0.5s ease' }} />
+          <div style={{ height: 6, background: '#f1f5f9', borderRadius: 6, overflow: 'hidden' }}>
+            <div
+              style={{
+                height: '100%',
+                width: `${deliveryPct}%`,
+                background: 'var(--clr-primary)',
+                borderRadius: 6,
+                transition: 'width 0.4s ease'
+              }}
+            />
           </div>
         </div>
       )}
 
-      {/* Recipients table */}
+      {/* Recipients high-density table */}
       <div className="table-wrap">
-        <table className="table">
+        <table className="table-compact">
           <thead>
-            <tr><th>Phone</th><th>Status</th><th>Sent</th><th>Delivered</th><th>Read</th><th>Error</th></tr>
+            <tr>
+              <th>Recipient Phone</th>
+              <th className="text-center">Status</th>
+              <th>Sent Time</th>
+              <th>Delivered Time</th>
+              <th>Read Time</th>
+              <th>Meta Error Details</th>
+            </tr>
           </thead>
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan="6" style={{ textAlign: 'center', padding: '30px 16px', color: 'var(--clr-text-3)' }}>
+                <td colSpan="6" style={{ textAlign: 'center', padding: '24px 12px', color: 'var(--text-muted)' }}>
                   No recipients match this filter.
                 </td>
               </tr>
             ) : (
-              filtered.slice(0, 200).map(r => (
+              filtered.slice(0, 250).map(r => (
                 <tr key={r.id}>
-                  <td style={{ fontFamily: 'monospace', fontSize: 12 }}>+{r.phone}</td>
-                  <td>
-                    <span className={`badge ${r.status === 'delivered' || r.status === 'read' ? 'badge--green' : r.status === 'failed' ? 'badge--red' : r.status === 'sent' ? 'badge--blue' : 'badge--gray'}`}>
-                      {r.status}
+                  <td className="text-mono" style={{ fontSize: 12, fontWeight: 500 }}>
+                    +{r.phone}
+                  </td>
+                  <td className="text-center">
+                    <span className={`badge ${
+                      r.status === 'read' ? 'badge--purple' :
+                      r.status === 'delivered' ? 'badge--green' :
+                      r.status === 'sent' ? 'badge--blue' :
+                      r.status === 'failed' ? 'badge--red' : 'badge--gray'
+                    }`}>
+                      {r.status?.toUpperCase()}
                     </span>
                   </td>
-                  <td style={{ fontSize: 12, color: 'var(--clr-text-3)' }}>{fmt(r.sent_at)}</td>
-                  <td style={{ fontSize: 12, color: 'var(--clr-text-3)' }}>{fmt(r.delivered_at)}</td>
-                  <td style={{ fontSize: 12, color: 'var(--clr-text-3)' }}>{fmt(r.read_at)}</td>
-                  <td style={{ fontSize: 11, color: 'var(--clr-danger)' }}>{r.error_msg || ''}</td>
+                  <td className="text-mono" style={{ fontSize: 11.5, color: 'var(--text-secondary)' }}>{fmt(r.sent_at)}</td>
+                  <td className="text-mono" style={{ fontSize: 11.5, color: 'var(--text-secondary)' }}>{fmt(r.delivered_at)}</td>
+                  <td className="text-mono" style={{ fontSize: 11.5, color: 'var(--text-secondary)' }}>{fmt(r.read_at)}</td>
+                  <td style={{ fontSize: 11.5, color: r.error_msg ? 'var(--clr-danger)' : 'var(--text-muted)' }}>
+                    {r.error_msg || '—'}
+                  </td>
                 </tr>
               ))
             )}
           </tbody>
         </table>
-        {filtered.length > 200 && <div style={{ padding: '10px 16px', fontSize: 12, color: 'var(--clr-text-3)' }}>Showing 200 of {filtered.length} — export CSV for full list</div>}
+        {filtered.length > 250 && (
+          <div style={{ padding: '8px 12px', fontSize: 11.5, color: 'var(--text-muted)', background: 'var(--bg-subtle)' }}>
+            Showing top 250 of {filtered.length} recipients. Export CSV for the full audit log.
+          </div>
+        )}
       </div>
     </div>
   );

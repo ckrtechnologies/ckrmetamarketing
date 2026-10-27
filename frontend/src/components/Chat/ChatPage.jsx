@@ -27,14 +27,30 @@ function formatTime(dateStr) {
   return new Date(dateStr).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
 }
 
-function isWindowOpen(conv) {
-  if (!conv?.window_expires) return false;
-  return new Date() < new Date(conv.window_expires);
+function isWindowOpen(conv, msgs = []) {
+  if (conv?.window_expires && new Date() < new Date(conv.window_expires)) {
+    return true;
+  }
+  if (Array.isArray(msgs) && msgs.length > 0) {
+    const lastInbound = msgs.slice().reverse().find(m => m.direction === 'inbound');
+    if (lastInbound && lastInbound.sent_at) {
+      const diff = new Date() - new Date(lastInbound.sent_at);
+      if (diff < 24 * 60 * 60 * 1000) return true;
+    }
+  }
+  return false;
 }
 
-function windowTimeLeft(conv) {
-  if (!conv?.window_expires) return null;
-  const diff = new Date(conv.window_expires) - new Date();
+function windowTimeLeft(conv, msgs = []) {
+  let expires = conv?.window_expires ? new Date(conv.window_expires) : null;
+  if (!expires && Array.isArray(msgs) && msgs.length > 0) {
+    const lastInbound = msgs.slice().reverse().find(m => m.direction === 'inbound');
+    if (lastInbound && lastInbound.sent_at) {
+      expires = new Date(new Date(lastInbound.sent_at).getTime() + 24 * 60 * 60 * 1000);
+    }
+  }
+  if (!expires) return null;
+  const diff = expires - new Date();
   if (diff <= 0) return 'Expired';
   const h = Math.floor(diff / 3600000);
   const m = Math.floor((diff % 3600000) / 60000);
@@ -61,7 +77,8 @@ function MessageStatusIcon({ status }) {
   return null;
 }
 
-export default function ChatPage({ user }) {
+export default function ChatPage({ user, org }) {
+  const orgId = user?.org_id || org?.id;
   const [searchParams, setSearchParams] = useSearchParams();
 
   const [conversations, setConversations] = useState([]);
@@ -111,6 +128,11 @@ export default function ChatPage({ user }) {
 
   const messagesEndRef  = useRef(null);
   const socketRef = useRef(null);
+  const activeConvRef = useRef(activeConv);
+
+  useEffect(() => {
+    activeConvRef.current = activeConv;
+  }, [activeConv]);
 
   useEffect(() => {
     loadConversations(true);
@@ -212,45 +234,65 @@ export default function ChatPage({ user }) {
 
   // Setup Socket.io
   useEffect(() => {
-    if (!user?.org_id) return;
-    
-    const socket = io(SOCKET_URL);
+    const socket = io(SOCKET_URL || window.location.origin, {
+      transports: ['websocket', 'polling'],
+      reconnectionAttempts: 10,
+      reconnectionDelay: 1000,
+    });
     socketRef.current = socket;
 
     socket.on('connect', () => {
-      socket.emit('join_org', user.org_id);
+      if (orgId) {
+        socket.emit('join_org', orgId);
+      }
     });
 
     socket.on('new_message', (data) => {
+      if (!data) return;
       const { conversation_id, message, conversation } = data;
+      const currentActive = activeConvRef.current;
+
       // If we are currently viewing this chat, append it!
-      setActiveConv(prevConv => {
-        if (prevConv && prevConv.id === conversation_id) {
-          setMessages(prev => {
-            if (prev.find(m => m.id === message.id)) return prev;
-            return [...prev, message];
-          });
-          // Also if they message us, the window resets!
-          if (message.direction === 'inbound') {
-            setWindowExpired(false);
+      if (currentActive && currentActive.id === conversation_id && message) {
+        setMessages(prev => {
+          const exists = prev.some(m =>
+            (m.id && message.id && m.id === message.id) ||
+            (m.wamid && message.wamid && m.wamid === message.wamid)
+          );
+          if (exists) {
+            return prev.map(m =>
+              (m.id && message.id && m.id === message.id) || (m.wamid && message.wamid && m.wamid === message.wamid)
+                ? { ...m, ...message }
+                : m
+            );
           }
+          return [...prev, message];
+        });
+
+        if (message.direction === 'inbound') {
+          setWindowExpired(false);
         }
-        return prevConv;
-      });
+      }
 
       // Update the conversation list with the latest message snippet and unread count
       setConversations(prev => {
         const idx = prev.findIndex(c => c.id === conversation_id);
+        const snippet = (message?.body || '').substring(0, 60);
+        const sentAt = message?.sent_at || new Date().toISOString();
+
         if (idx !== -1) {
           const newConvs = [...prev];
-          newConvs[idx].last_message = message.body.substring(0, 60);
-          newConvs[idx].last_message_at = message.sent_at;
-          if (activeConv?.id !== conversation_id) {
-            newConvs[idx].unread_count = (newConvs[idx].unread_count || 0) + 1;
+          const updated = {
+            ...newConvs[idx],
+            last_message: snippet,
+            last_message_at: sentAt,
+          };
+          if (!currentActive || currentActive.id !== conversation_id) {
+            updated.unread_count = (updated.unread_count || 0) + 1;
           }
           // Move to top
-          const [item] = newConvs.splice(idx, 1);
-          newConvs.unshift(item);
+          newConvs.splice(idx, 1);
+          newConvs.unshift(updated);
           return newConvs;
         } else if (conversation) {
           return [conversation, ...prev];
@@ -260,14 +302,17 @@ export default function ChatPage({ user }) {
     });
 
     socket.on('message_status', (data) => {
+      if (!data) return;
       const { wamid, status, timestamp } = data;
-      setMessages(prev => prev.map(m => m.wamid === wamid ? { ...m, status, [status + '_at']: timestamp } : m));
+      setMessages(prev =>
+        prev.map(m => (m.wamid === wamid ? { ...m, status, [status + '_at']: timestamp } : m))
+      );
     });
 
     return () => {
       socket.disconnect();
     };
-  }, [user]);
+  }, [orgId]);
 
   async function loadConversations(reset = false) {
     try {
@@ -334,10 +379,15 @@ export default function ChatPage({ user }) {
 
     try {
       const data = await getConversation(conv.id);
-      setMessages(data.messages || []);
+      const msgs = data.messages || [];
+      const freshConv = data.conversation ? { ...conv, ...data.conversation } : conv;
+      setMessages(msgs);
+      setActiveConv(freshConv);
+      const open = isWindowOpen(freshConv, msgs);
+      setWindowExpired(!open);
       // Update unread count in sidebar
       setConversations(prev =>
-        prev.map(c => c.id === conv.id ? { ...c, unread_count: 0 } : c)
+        prev.map(c => c.id === conv.id ? { ...c, ...freshConv, unread_count: 0 } : c)
       );
     } catch (e) {}
     finally { setLoadingMsgs(false); }
@@ -405,7 +455,7 @@ export default function ChatPage({ user }) {
       }
       
       setMessages(prev => prev.map(m =>
-        m.id === tempId ? { ...optimistic, wamid: data.wamid } : m
+        m.id === tempId ? { ...optimistic, id: data.message?.id || tempId, wamid: data.wamid } : m
       ));
       
       setConversations(prev =>
@@ -580,7 +630,7 @@ export default function ChatPage({ user }) {
     return grouped;
   }
 
-  const windowOpen = activeConv && isWindowOpen(activeConv);
+  const windowOpen = activeConv && isWindowOpen(activeConv, messages);
 
   return (
     <div className="chat-page fade-in">
@@ -772,7 +822,7 @@ export default function ChatPage({ user }) {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   {windowOpen ? (
                     <span className="window-badge window-badge--open">
-                      🟢 24h Window Open ({windowTimeLeft(activeConv)})
+                      🟢 24h Window Open ({windowTimeLeft(activeConv, messages)})
                     </span>
                   ) : (
                     <span className="window-badge window-badge--expired">

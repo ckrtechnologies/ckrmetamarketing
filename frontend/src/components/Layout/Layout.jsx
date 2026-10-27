@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import Sidebar from './Sidebar.jsx';
-import ThemeToggle from '../Common/ThemeToggle.jsx';
 import './Layout.css';
 
 export default function Layout({ children, user, org, title }) {
@@ -25,7 +24,7 @@ export default function Layout({ children, user, org, title }) {
 
       <div className="app-main">
         <header className="topbar">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div className="topbar__left">
             <button
               className="mobile-menu-btn"
               onClick={() => setSidebarOpen(prev => !prev)}
@@ -33,10 +32,17 @@ export default function Layout({ children, user, org, title }) {
             >
               ☰
             </button>
-            <span className="topbar__title">{title || 'CKR Meta Marketing'}</span>
+            <div className="topbar__breadcrumb">
+              <span className="topbar__portal-tag">Meta Marketing</span>
+              <span className="topbar__divider">/</span>
+              <span className="topbar__title">{title || 'Dashboard'}</span>
+            </div>
           </div>
           <div className="topbar__actions">
-            <ThemeToggle />
+            <div className="topbar__status-pill badge badge--green" title="Meta Cloud API Connected">
+              <span className="status-dot-pulse" />
+              <span>Meta API v21.0 Connected</span>
+            </div>
           </div>
         </header>
 
@@ -47,4 +53,3 @@ export default function Layout({ children, user, org, title }) {
     </div>
   );
 }
-

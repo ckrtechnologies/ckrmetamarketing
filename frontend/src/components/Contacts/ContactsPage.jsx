@@ -489,7 +489,7 @@ export default function ContactsPage() {
             </div>
           ) : (
             <div className="table-wrap">
-              <table className="table">
+              <table className="table-compact">
                 <thead>
                   <tr>
                     <th style={{ width: 36, textAlign: 'center' }}>

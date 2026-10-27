@@ -6,8 +6,8 @@ import './Campaign.css';
 
 const STATUS_BADGE = {
   draft:     'badge--gray',
-  scheduled: 'badge--blue',
-  running:   'badge--yellow',
+  scheduled: 'badge--yellow',
+  running:   'badge--blue',
   paused:    'badge--yellow',
   completed: 'badge--green',
   failed:    'badge--red',
@@ -57,7 +57,14 @@ export default function CampaignList() {
 
   function formatDate(d) {
     if (!d) return '—';
-    return new Date(d).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+    return new Date(d).toLocaleDateString('en-IN', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
+    });
   }
 
   if (viewReport) {
@@ -68,11 +75,11 @@ export default function CampaignList() {
     <div className="fade-in">
       <div className="page-header">
         <div>
-          <h1>📣 Campaigns</h1>
-          <p>{total} campaigns total</p>
+          <h1>📣 WhatsApp Broadcast Campaigns</h1>
+          <p>{total} campaigns total • Trigger template messages to targeted contact lists</p>
         </div>
         <div className="page-header__actions">
-          <button className="btn btn--primary" onClick={() => setShowBuilder(true)}>+ New Campaign</button>
+          <button className="btn btn--primary btn--sm" onClick={() => setShowBuilder(true)}>+ New Campaign</button>
         </div>
       </div>
 
@@ -81,54 +88,72 @@ export default function CampaignList() {
       {loading ? (
         <div className="loading-center"><div className="spinner" /></div>
       ) : campaigns.length === 0 ? (
-        <div className="card" style={{ textAlign: 'center', padding: '60px 20px' }}>
-          <div style={{ fontSize: 48, marginBottom: 14 }}>📣</div>
-          <h2 style={{ fontFamily: 'var(--font-display)', marginBottom: 8 }}>No campaigns yet</h2>
-          <p style={{ color: 'var(--clr-text-2)', marginBottom: 20 }}>Create your first WhatsApp campaign to start reaching customers.</p>
-          <button className="btn btn--primary btn--lg" onClick={() => setShowBuilder(true)}>+ Create Campaign</button>
+        <div className="card" style={{ textAlign: 'center', padding: '40px 20px' }}>
+          <div style={{ fontSize: 36, marginBottom: 10 }}>📣</div>
+          <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 16, marginBottom: 6, color: 'var(--text-primary)' }}>No campaigns yet</h2>
+          <p style={{ color: 'var(--text-secondary)', fontSize: 12.5, marginBottom: 14 }}>Create your first WhatsApp campaign to start reaching customers.</p>
+          <button className="btn btn--primary btn--sm" onClick={() => setShowBuilder(true)}>+ Create Campaign</button>
         </div>
       ) : (
         <div className="table-wrap">
-          <table className="table">
+          <table className="table-compact">
             <thead>
               <tr>
                 <th>Campaign Name</th>
-                <th>Template</th>
-                <th>Number</th>
-                <th>Recipients</th>
-                <th>Status</th>
-                <th>Created</th>
-                <th>Actions</th>
+                <th>Meta Template</th>
+                <th>Phone Number</th>
+                <th className="text-right">Recipients</th>
+                <th className="text-center">Status</th>
+                <th>Created At</th>
+                <th className="text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
               {campaigns.map(c => (
                 <tr key={c.id}>
-                  <td style={{ fontWeight: 700 }}>{c.name}</td>
-                  <td><code style={{ fontSize: 11, color: 'var(--clr-primary)' }}>{c.template_name}</code></td>
-                  <td style={{ fontSize: 12, color: 'var(--clr-text-2)' }}>
-                    {c.waba_accounts?.display_number || '—'}
+                  <td style={{ fontWeight: 600 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span>{c.name}</span>
+                    </div>
                   </td>
-                  <td style={{ fontWeight: 600 }}>{c.total_recipients?.toLocaleString() || 0}</td>
                   <td>
-                    <span className={`badge ${STATUS_BADGE[c.status] || 'badge--gray'}`}>
-                      {c.status === 'running' ? '⚡ ' : ''}{c.status}
+                    <span className="badge badge--teal text-mono" style={{ fontSize: 11 }}>
+                      {c.template_name}
                     </span>
                   </td>
-                  <td style={{ fontSize: 12, color: 'var(--clr-text-3)' }}>{formatDate(c.created_at)}</td>
-                  <td>
-                    <div style={{ display: 'flex', gap: 6 }}>
-                      <button className="btn btn--secondary btn--sm" onClick={() => setViewReport(c.id)}>📊 Report</button>
+                  <td className="text-mono" style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                    {c.waba_accounts?.display_number || '—'}
+                  </td>
+                  <td className="td-num td-mono" style={{ fontWeight: 600 }}>
+                    {c.total_recipients?.toLocaleString() || 0}
+                  </td>
+                  <td className="text-center">
+                    <span className={`badge ${STATUS_BADGE[c.status] || 'badge--gray'}`}>
+                      {c.status === 'running' ? '⚡ ' : ''}{c.status?.toUpperCase()}
+                    </span>
+                  </td>
+                  <td className="text-mono" style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>
+                    {formatDate(c.created_at)}
+                  </td>
+                  <td className="text-right">
+                    <div style={{ display: 'inline-flex', gap: 4, justifyContent: 'flex-end' }}>
+                      <button className="btn btn--secondary btn--xs" onClick={() => setViewReport(c.id)}>
+                        📊 Report
+                      </button>
                       {c.status === 'draft' && (
-                        <button className="btn btn--primary btn--sm" onClick={() => handleLaunch(c.id)} disabled={launching[c.id]}>
+                        <button className="btn btn--primary btn--xs" onClick={() => handleLaunch(c.id)} disabled={launching[c.id]}>
                           {launching[c.id] ? '⏳' : '🚀 Launch'}
                         </button>
                       )}
                       {c.status === 'running' && (
-                        <button className="btn btn--secondary btn--sm" onClick={() => handlePause(c.id)}>⏸ Pause</button>
+                        <button className="btn btn--secondary btn--xs" onClick={() => handlePause(c.id)}>
+                          ⏸ Pause
+                        </button>
                       )}
                       {['paused', 'draft'].includes(c.status) && (
-                        <button className="btn btn--danger btn--sm" onClick={() => handleDelete(c.id)}>✕</button>
+                        <button className="btn btn--danger btn--xs" onClick={() => handleDelete(c.id)} title="Delete">
+                          ✕
+                        </button>
                       )}
                     </div>
                   </td>
@@ -140,7 +165,11 @@ export default function CampaignList() {
       )}
 
       {showBuilder && (
-        <CampaignBuilder onClose={() => setShowBuilder(false)} onCreated={() => { setShowBuilder(false); loadCampaigns(); }} />
+        <CampaignBuilder
+          onClose={() => setShowBuilder(false)}
+          onCreated={() => { setShowBuilder(false); loadCampaigns(); }}
+          onSuccess={() => { setShowBuilder(false); loadCampaigns(); }}
+        />
       )}
     </div>
   );

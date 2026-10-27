@@ -1,41 +1,47 @@
-/* ── Contacts CRM Page ────────────────────────────────────────── */
+/* ==========================================================================
+   CKR Meta Marketing — Contacts CRM Styles
+   Solid Executive Canvas (210px Groups Sidebar, High-Density Table)
+   ========================================================================== */
+
 .contacts-page {
   display: flex;
   flex-direction: column;
   height: 100%;
-  gap: 16px;
+  gap: 12px;
 }
 
 .contacts-layout {
   display: flex;
-  gap: 18px;
+  gap: 14px;
   flex: 1;
   min-height: 0;
+  align-items: flex-start;
 }
 
-/* ── Sidebar: Groups ─────────────────────────────────────────── */
+/* ── Sidebar: Contact Groups (210px) ─────────────────────────────────── */
 .contacts-groups {
-  width: 250px;
-  min-width: 210px;
+  width: 210px;
+  min-width: 190px;
   flex-shrink: 0;
-  background: var(--clr-surface);
-  border: 1px solid var(--clr-border);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  height: fit-content;
-  max-height: calc(100vh - 170px);
+  box-shadow: var(--shadow-xs);
+  max-height: calc(100vh - 120px);
 }
 
 .contacts-groups__header {
-  padding: 14px 16px 10px;
-  font-size: 11.5px;
+  padding: 8px 12px;
+  font-size: 11px;
   font-weight: 700;
-  color: var(--clr-text-3);
+  color: var(--text-secondary);
   text-transform: uppercase;
-  letter-spacing: .06em;
-  border-bottom: 1px solid var(--clr-border);
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid var(--border-default);
+  background: var(--bg-subtle);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -45,23 +51,23 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
-  padding: 10px 16px;
+  gap: 6px;
+  padding: 7px 10px;
   cursor: pointer;
-  font-size: 13px;
-  color: var(--clr-text-2);
-  transition: all 0.15s ease;
-  border-bottom: 1px solid rgba(255,255,255,.02);
+  font-size: 12px;
+  color: var(--text-secondary);
+  transition: all 0.12s ease;
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .contacts-groups__item:hover {
-  background: rgba(255,255,255,.04);
-  color: var(--clr-text);
+  background: var(--bg-hover);
+  color: var(--text-primary);
 }
 
 .contacts-groups__item--active {
-  background: var(--clr-primary-bg) !important;
-  color: var(--clr-primary) !important;
+  background: #f0fdf4 !important;
+  color: #047857 !important;
   font-weight: 700;
   border-left: 3px solid var(--clr-primary);
 }
@@ -69,9 +75,9 @@
 .contacts-groups__actions {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
   opacity: 0;
-  transition: opacity 0.15s;
+  transition: opacity 0.12s;
 }
 
 .contacts-groups__item:hover .contacts-groups__actions {
@@ -81,73 +87,74 @@
 .contacts-groups__btn {
   background: none;
   border: none;
-  color: var(--clr-text-3);
-  font-size: 11px;
+  color: var(--text-muted);
+  font-size: 10.5px;
   cursor: pointer;
-  padding: 3px 5px;
-  border-radius: 4px;
-  transition: color 0.15s, background 0.15s;
+  padding: 2px 4px;
+  border-radius: 3px;
 }
 
 .contacts-groups__btn:hover {
-  background: rgba(255,255,255,0.08);
-  color: var(--clr-text);
+  background: var(--bg-subtle);
+  color: var(--text-primary);
 }
 
 .contacts-groups__btn--del:hover {
   color: var(--clr-danger);
 }
 
-/* ── Main Contacts Area ──────────────────────────────────────── */
+/* ── Main Contacts Area ──────────────────────────────────────────────── */
 .contacts-main {
   flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 10px;
 }
 
 /* Filter bar */
 .contacts-filter-bar {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   flex-wrap: wrap;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  padding: 8px 10px;
+  box-shadow: var(--shadow-xs);
 }
 
 .contacts-search-input {
   flex: 1;
-  min-width: 220px;
+  min-width: 200px;
+  height: 32px;
 }
 
 .contacts-filter-select {
-  width: 140px;
+  width: 130px;
+  height: 32px;
 }
 
-/* ── Bulk Actions Toolbar ────────────────────────────────────── */
+/* ── Bulk Actions Toolbar ────────────────────────────────────────────── */
 .contacts-bulk-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  background: #11281c;
-  border: 1px solid rgba(37,211,102,0.3);
-  padding: 10px 16px;
+  gap: 10px;
+  background: #f0fdf4;
+  border: 1px solid #a7f3d0;
+  padding: 6px 12px;
   border-radius: var(--radius-md);
-  color: var(--clr-text);
-  animation: slideDown 0.2s ease;
+  color: var(--text-primary);
+  animation: fadeIn 0.18s ease;
   flex-wrap: wrap;
 }
 
-@keyframes slideDown {
-  from { opacity: 0; transform: translateY(-6px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
 .contacts-bulk-count {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
-  color: var(--clr-primary);
+  color: #047857;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -156,22 +163,22 @@
 .contacts-bulk-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   flex-wrap: wrap;
 }
 
-/* ── Contacts Table Enhancements ─────────────────────────────── */
+/* ── Contacts Table Enhancements ─────────────────────────────────────── */
 .contact-avatar {
-  width: 32px;
-  height: 32px;
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #1e3a2d, #0f2b1d);
-  border: 1px solid rgba(37,211,102,0.3);
-  color: var(--clr-primary);
+  background: #e0f2fe;
+  color: #0284c7;
+  border: 1px solid #bae6fd;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 12px;
+  font-size: 10px;
   font-weight: 700;
   flex-shrink: 0;
 }
@@ -179,24 +186,33 @@
 .contact-cell-name {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
 }
 
 .contact-name-text {
   font-weight: 600;
-  color: var(--clr-text);
-  font-size: 13px;
+  color: var(--text-primary);
+  font-size: 12.5px;
 }
 
 .contact-city-sub {
-  font-size: 11px;
-  color: var(--clr-text-3);
-  margin-top: 1px;
+  font-size: 10.5px;
+  color: var(--text-muted);
 }
 
 .contact-checkbox {
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
   cursor: pointer;
   accent-color: var(--clr-primary);
+}
+
+@media (max-width: 800px) {
+  .contacts-layout {
+    flex-direction: column;
+  }
+  .contacts-groups {
+    width: 100%;
+    max-height: 200px;
+  }
 }

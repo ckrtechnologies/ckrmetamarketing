@@ -2,7 +2,8 @@ const fs = require('fs');
 const path = require('path');
 
 function getBaseDir() {
-  return process.env.PUBLIC_DIR || path.join(__dirname, '../../uploads');
+  const p = process.env.PUBLIC_DIR || 'public';
+  return path.isAbsolute(p) ? p : path.join(__dirname, '../../', p);
 }
 
 function getOrgDir(orgId) {
@@ -11,7 +12,7 @@ function getOrgDir(orgId) {
   return dir;
 }
 
-const CDN_BASE_URL = process.env.CDN_BASE_URL || 'https://cdn.ckrtechnologies.in';
+const CDN_BASE_URL = process.env.CDN_BASE_URL || 'http://localhost:5001/public';
 
 async function uploadMedia(req, res) {
   try {

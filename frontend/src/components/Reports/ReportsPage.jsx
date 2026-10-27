@@ -16,21 +16,21 @@ const FUNNEL_COLORS = {
 };
 
 const CHART_THEME = {
-  grid: 'rgba(255,255,255,0.06)',
+  grid: '#f1f5f9',
   axis: '#64748b',
-  tooltip: { background: '#1a2540', border: '1px solid rgba(255,255,255,0.1)', color: '#f0f4ff' },
+  tooltip: { background: '#ffffff', border: '1px solid #e2e8f0', color: '#0f172a' },
 };
 
 const CustomTooltip = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null;
   return (
-    <div style={{ background: '#1a2540', border: '1px solid rgba(255,255,255,.1)', borderRadius: 10, padding: '10px 14px', fontSize: 12 }}>
-      <div style={{ fontWeight: 700, marginBottom: 6, color: '#f0f4ff' }}>{label}</div>
+    <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8, padding: '8px 12px', fontSize: 12, boxShadow: '0 4px 6px -1px rgba(0,0,0,0.08)' }}>
+      <div style={{ fontWeight: 700, marginBottom: 4, color: '#0f172a' }}>{label}</div>
       {payload.map(p => (
-        <div key={p.dataKey} style={{ color: p.color, display: 'flex', gap: 6, alignItems: 'center' }}>
+        <div key={p.dataKey} style={{ color: p.color, display: 'flex', gap: 6, alignItems: 'center', fontSize: 11.5 }}>
           <span style={{ width: 8, height: 8, borderRadius: 2, background: p.color, flexShrink: 0 }} />
-          <span style={{ color: '#94a3b8' }}>{p.name}:</span>
-          <strong style={{ color: '#f0f4ff' }}>{p.value?.toLocaleString()}</strong>
+          <span style={{ color: '#64748b' }}>{p.name}:</span>
+          <strong style={{ color: '#0f172a' }}>{p.value?.toLocaleString()}</strong>
         </div>
       ))}
     </div>

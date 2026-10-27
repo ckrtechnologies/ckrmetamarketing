@@ -123,7 +123,7 @@ export default function WABAPage() {
         </div>
       ) : (
         <div className="table-wrap">
-          <table className="table">
+          <table className="table-compact">
             <thead>
               <tr>
                 <th>Display Name</th>
