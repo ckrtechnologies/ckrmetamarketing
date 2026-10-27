@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { getMe, isLoggedIn } from './api/auth.js';
+import { getMe, isLoggedIn, logout } from './api/auth.js';
 import Layout from './components/Layout/Layout.jsx';
 
 import AuthPage      from './components/Auth/AuthPage.jsx';
@@ -13,10 +13,8 @@ import ChatPage      from './components/Chat/ChatPage.jsx';
 import ReportsPage   from './components/Reports/ReportsPage.jsx';
 import MediaManager  from './components/Media/MediaManager.jsx';
 
-
-
 function ProtectedRoute({ user, org, title, children }) {
-  if (!isLoggedIn()) return <Navigate to="/login" replace />;
+  if (!isLoggedIn() || !user) return <Navigate to="/login" replace />;
   return (
     <Layout user={user} org={org} title={title}>
       {children}
@@ -32,8 +30,21 @@ export default function App() {
   useEffect(() => {
     if (isLoggedIn()) {
       getMe()
-        .then(data => { setUser(data.user); setOrg(data.org); })
-        .catch(() => {})
+        .then(data => {
+          if (data?.user) {
+            setUser(data.user);
+            setOrg(data.org);
+          } else {
+            logout();
+            setUser(null);
+            setOrg(null);
+          }
+        })
+        .catch(() => {
+          logout();
+          setUser(null);
+          setOrg(null);
+        })
         .finally(() => setLoading(false));
     } else {
       setLoading(false);
