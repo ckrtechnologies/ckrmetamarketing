@@ -63,6 +63,23 @@ app.use('/api/public', express.static(publicDir));
 app.use('/uploads', express.static(uploadsDir));
 app.use('/api/uploads', express.static(uploadsDir));
 
+// Explicit file serving handler for CDN media (direct sendFile with CORS headers)
+const serveCdnFile = (req, res, next) => {
+  const relPath = req.params[0] || '';
+  const absPath = path.resolve(publicDir, relPath);
+  if (!absPath.startsWith(publicDir)) {
+    return res.status(403).json({ error: 'Access denied' });
+  }
+  if (fs.existsSync(absPath) && fs.statSync(absPath).isFile()) {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Cache-Control', 'public, max-age=2592000, no-transform');
+    return res.sendFile(absPath);
+  }
+  next();
+};
+app.get('/api/public/*', serveCdnFile);
+app.get('/public/*', serveCdnFile);
+
 // ── Global rate limiter ────────────────────────────────────────────
 app.use('/api/', rateLimit({
   windowMs: 15 * 60 * 1000,  // 15 minutes
