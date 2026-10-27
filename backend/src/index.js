@@ -65,7 +65,8 @@ app.use('/api/uploads', express.static(uploadsDir));
 
 // Explicit file serving handler for CDN media (direct sendFile with CORS headers)
 const serveCdnFile = (req, res, next) => {
-  const relPath = req.params[0] || '';
+  const relPath = (req.path || '').replace(/^\//, '');
+  if (!relPath) return next();
   const absPath = path.resolve(publicDir, relPath);
   if (!absPath.startsWith(publicDir)) {
     return res.status(403).json({ error: 'Access denied' });
@@ -77,8 +78,9 @@ const serveCdnFile = (req, res, next) => {
   }
   next();
 };
-app.get('/api/public/*', serveCdnFile);
-app.get('/public/*', serveCdnFile);
+app.use('/api/public', serveCdnFile);
+app.use('/public', serveCdnFile);
+
 
 // ── Global rate limiter ────────────────────────────────────────────
 app.use('/api/', rateLimit({
