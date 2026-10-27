@@ -303,9 +303,9 @@ export default function ChatPage({ user, org }) {
 
     socket.on('message_status', (data) => {
       if (!data) return;
-      const { wamid, status, timestamp } = data;
+      const { wamid, status, timestamp, message_id } = data;
       setMessages(prev =>
-        prev.map(m => (m.wamid === wamid ? { ...m, status, [status + '_at']: timestamp } : m))
+        prev.map(m => ((m.wamid === wamid || (message_id && m.id === message_id)) ? { ...m, status, [status + '_at']: timestamp } : m))
       );
     });
 

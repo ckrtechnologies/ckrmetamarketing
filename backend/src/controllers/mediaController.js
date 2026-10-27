@@ -1,16 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-
-function getBaseDir() {
-  const p = process.env.PUBLIC_DIR || 'public';
-  return path.isAbsolute(p) ? p : path.join(__dirname, '../../', p);
-}
-
-function getOrgDir(orgId) {
-  const dir = path.join(getBaseDir(), String(orgId));
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  return dir;
-}
+const { getOrgPublicDir } = require('../utils/paths');
 
 const CDN_BASE_URL = process.env.CDN_BASE_URL || 'http://localhost:5001/public';
 
@@ -19,7 +9,7 @@ async function uploadMedia(req, res) {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
 
     const orgId = req.orgId;
-    const orgDir = getOrgDir(orgId);
+    const orgDir = getOrgPublicDir(orgId);
     
     // Create a safe, unique filename
     const safeName = req.file.originalname.replace(/[^a-zA-Z0-9.\-_]/g, '');
@@ -46,7 +36,7 @@ async function uploadMedia(req, res) {
 async function listMedia(req, res) {
   try {
     const orgId = req.orgId;
-    const orgDir = getOrgDir(orgId);
+    const orgDir = getOrgPublicDir(orgId);
 
     const files = fs.readdirSync(orgDir);
     const mediaList = files
@@ -77,7 +67,7 @@ async function deleteMedia(req, res) {
   try {
     const { filename } = req.params;
     const orgId = req.orgId;
-    const orgDir = getOrgDir(orgId);
+    const orgDir = getOrgPublicDir(orgId);
     
     // Prevent directory traversal
     const safeFilename = path.basename(filename);

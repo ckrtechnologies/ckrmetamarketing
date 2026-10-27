@@ -220,16 +220,16 @@ export default function TemplateBuilderModal({ wabaId, onClose, onSuccess }) {
                     style={{
                       padding: '10px 12px',
                       borderRadius: 8,
-                      border: `1px solid ${category === c.code ? '#25d366' : 'var(--clr-border)'}`,
-                      background: category === c.code ? 'rgba(37, 211, 102, 0.08)' : 'rgba(255, 255, 255, 0.02)',
+                      border: `1px solid ${category === c.code ? '#059669' : 'var(--border-default, #e2e8f0)'}`,
+                      background: category === c.code ? '#ecfdf5' : 'var(--bg-subtle, #f8fafc)',
                       cursor: 'pointer',
                       transition: 'all 0.15s ease',
                     }}
                   >
-                    <div style={{ fontWeight: 600, fontSize: 12.5, color: category === c.code ? '#25d366' : '#fff' }}>
+                    <div style={{ fontWeight: 600, fontSize: 12.5, color: category === c.code ? '#047857' : 'var(--text-primary, #0f172a)' }}>
                       {c.label.split('(')[0]}
                     </div>
-                    <div style={{ fontSize: 11, color: 'var(--clr-text-3)', marginTop: 2 }}>
+                    <div style={{ fontSize: 11, color: 'var(--text-secondary, #475569)', marginTop: 2 }}>
                       {c.desc}
                     </div>
                   </div>
@@ -238,7 +238,7 @@ export default function TemplateBuilderModal({ wabaId, onClose, onSuccess }) {
             </div>
 
             {/* Header */}
-            <div className="card" style={{ padding: 14, background: 'rgba(255,255,255,0.02)' }}>
+            <div className="card" style={{ padding: 14, background: 'var(--bg-subtle, #f8fafc)', border: '1px solid var(--border-default, #e2e8f0)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                 <label className="form-label" style={{ fontWeight: 700, margin: 0 }}>
                   🖼️ Header (Optional)
@@ -266,14 +266,14 @@ export default function TemplateBuilderModal({ wabaId, onClose, onSuccess }) {
                 />
               )}
               {['IMAGE', 'DOCUMENT', 'VIDEO'].includes(headerType) && (
-                <div style={{ fontSize: 12, color: 'var(--clr-text-3)', padding: 8, background: 'rgba(0,0,0,0.2)', borderRadius: 6 }}>
+                <div style={{ fontSize: 12, color: '#1e40af', padding: 8, background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 6 }}>
                   ℹ️ Media headers require uploading the file or providing a direct public URL when creating a campaign.
                 </div>
               )}
             </div>
 
             {/* Body */}
-            <div className="card" style={{ padding: 14, background: 'rgba(255,255,255,0.02)' }}>
+            <div className="card" style={{ padding: 14, background: 'var(--bg-subtle, #f8fafc)', border: '1px solid var(--border-default, #e2e8f0)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                 <label className="form-label" style={{ fontWeight: 700, margin: 0 }}>
                   💬 Body Text *
@@ -298,14 +298,14 @@ export default function TemplateBuilderModal({ wabaId, onClose, onSuccess }) {
 
               {/* Sample values for variables */}
               {detectedVars.length > 0 && (
-                <div style={{ marginTop: 12, padding: 10, background: 'rgba(0,0,0,0.3)', borderRadius: 8 }}>
-                  <div style={{ fontSize: 11.5, fontWeight: 700, color: '#25d366', marginBottom: 6 }}>
+                <div style={{ marginTop: 12, padding: 10, background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8 }}>
+                  <div style={{ fontSize: 11.5, fontWeight: 700, color: '#b45309', marginBottom: 6 }}>
                     ⚠️ Meta Approval Requirement: Provide sample values for each variable
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 8 }}>
                     {detectedVars.map(v => (
                       <div key={v}>
-                        <label style={{ fontSize: 11, color: 'var(--clr-text-2)', display: 'block', marginBottom: 2 }}>
+                        <label style={{ fontSize: 11, color: 'var(--text-secondary, #475569)', display: 'block', marginBottom: 2 }}>
                           Sample for &#123;&#123;{v}&#125;&#125;:
                         </label>
                         <input
@@ -336,7 +336,7 @@ export default function TemplateBuilderModal({ wabaId, onClose, onSuccess }) {
             </div>
 
             {/* Interactive Buttons */}
-            <div className="card" style={{ padding: 14, background: 'rgba(255,255,255,0.02)' }}>
+            <div className="card" style={{ padding: 14, background: 'var(--bg-subtle, #f8fafc)', border: '1px solid var(--border-default, #e2e8f0)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                 <label className="form-label" style={{ fontWeight: 700, margin: 0 }}>
                   🔘 Buttons (Optional)

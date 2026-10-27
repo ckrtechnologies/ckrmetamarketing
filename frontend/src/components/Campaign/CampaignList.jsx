@@ -17,10 +17,12 @@ export default function CampaignList() {
   const [campaigns,    setCampaigns]    = useState([]);
   const [total,        setTotal]        = useState(0);
   const [loading,      setLoading]      = useState(true);
-  const [showBuilder,  setShowBuilder]  = useState(false);
-  const [viewReport,   setViewReport]   = useState(null);
-  const [error,        setError]        = useState('');
-  const [launching,    setLaunching]    = useState({});
+  const [showBuilder,      setShowBuilder]      = useState(false);
+  const [editingCampaign,  setEditingCampaign]  = useState(null);
+  const [isDuplicate,      setIsDuplicate]      = useState(false);
+  const [viewReport,       setViewReport]       = useState(null);
+  const [error,            setError]            = useState('');
+  const [launching,        setLaunching]        = useState({});
 
   useEffect(() => { loadCampaigns(); }, []);
 

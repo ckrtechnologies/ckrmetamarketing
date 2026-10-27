@@ -206,16 +206,19 @@ async function getMessages(conversation_id, { limit = 100, offset = 0 } = {}) {
   return { messages: data, total: count };
 }
 
-async function updateMessageStatus(wamid, status) {
-  const tsField = status === 'delivered' ? 'delivered_at' : status === 'read' ? 'read_at' : null;
+async function updateMessageStatus(wamid, status, timestamp = null) {
+  const tsField = status === 'delivered' ? 'delivered_at' : status === 'read' ? 'read_at' : status === 'failed' ? 'failed_at' : null;
   const updates = { status };
-  if (tsField) updates[tsField] = new Date().toISOString();
+  if (tsField) updates[tsField] = timestamp || new Date().toISOString();
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('messages')
     .update(updates)
-    .eq('wamid', wamid);
+    .eq('wamid', wamid)
+    .select('id, conversation_id, status, delivered_at, read_at')
+    .maybeSingle();
   if (error) console.error('[updateMessageStatus]', error.message);
+  return data;
 }
 
 async function getUnreadCount(org_id) {

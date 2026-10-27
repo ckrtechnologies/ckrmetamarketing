@@ -2,6 +2,7 @@ const { updateRecipientByWamid, logDelivery } = require('../repositories/campaig
 const { upsertConversation, addMessage, updateMessageStatus } = require('../repositories/chatRepo');
 const orgRepo = require('../repositories/orgRepo');
 const { getMediaUrl, downloadMediaData } = require('../utils/metaClient');
+const { getOrgPublicDir } = require('../utils/paths');
 const fs = require('fs');
 const path = require('path');
 
@@ -111,13 +112,11 @@ async function handleInboundMessage(value, msg, req) {
         
         const dlRes = await downloadMediaData(url, access_token);
         if (dlRes.success) {
-          const pubDir = process.env.PUBLIC_DIR || path.join(__dirname, '../../public');
-          const orgDir = path.join(pubDir, org_id, 'chat');
-          if (!fs.existsSync(orgDir)) fs.mkdirSync(orgDir, { recursive: true });
+          const orgDir = getOrgPublicDir(org_id, 'chat');
           
           const filename = `${mediaObj.id}.${ext}`;
           const filepath = path.join(orgDir, filename);
-          fs.writeFileSync(filepath, Buffer.from(dlRes.data));
+          fs.writeFileSync(filepath, Buffer.from(dlRes.data), { mode: 0o644 });
           
           const cdnBase = process.env.CDN_BASE_URL || 'http://localhost:5001/public';
           const mediaLink = `${cdnBase}/${org_id}/chat/${filename}`;
@@ -224,12 +223,14 @@ async function handleStatusUpdate(statusObj, req) {
   await updateRecipientByWamid(wamid, recipientUpdate);
 
   // Chat message status update
-  await updateMessageStatus(wamid, newStatus);
+  const updatedMsg = await updateMessageStatus(wamid, newStatus, ts);
 
   const io = req.app.get('io');
   if (io) {
     io.emit('message_status', {
       wamid,
+      conversation_id: updatedMsg?.conversation_id,
+      message_id: updatedMsg?.id,
       status: newStatus,
       timestamp: ts
     });

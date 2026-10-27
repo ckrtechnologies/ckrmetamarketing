@@ -114,7 +114,7 @@ async function listTemplates(req, res) {
     const rawList = result.data?.data || [];
     const USABLE_STATUSES = ['APPROVED', 'ACTIVE'];
 
-    const templates = (all === 'true' ? rawList : rawList.filter(t => USABLE_STATUSES.includes(t.status?.toUpperCase())))
+    const templates = (all === 'true' ? rawList : rawList.filter(t => USABLE_STATUSES.includes(String(t.status || '').toUpperCase())))
       .map(t => ({
         id:              t.id,
         name:            t.name,
@@ -122,9 +122,9 @@ async function listTemplates(req, res) {
         language:        t.language,
         category:        t.category,
         components:      t.components,
-        quality_score:   t.quality_score,
+        quality_score:   typeof t.quality_score === 'object' ? (t.quality_score?.score || null) : (t.quality_score || null),
         rejected_reason: t.rejected_reason || null,
-        is_usable:       USABLE_STATUSES.includes(t.status?.toUpperCase()),
+        is_usable:       USABLE_STATUSES.includes(String(t.status || '').toUpperCase()),
       }));
     return res.json({ templates });
   } catch (err) {

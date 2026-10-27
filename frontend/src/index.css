@@ -35,6 +35,7 @@
   --text-inverse:         #ffffff;
 
   --clr-text:             var(--text-primary);
+  --clr-text-1:           var(--text-primary);
   --clr-text-2:           var(--text-secondary);
   --clr-text-3:           var(--text-muted);
 
@@ -514,7 +515,8 @@ input, textarea, select {
   gap: 8px;
 }
 
-.alert--error {
+.alert--error,
+.alert--danger {
   background: #fef2f2;
   border: 1px solid #fecaca;
   color: #991b1b;

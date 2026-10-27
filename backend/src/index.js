@@ -18,6 +18,7 @@ const analyticsRoutes = require('./routes/analytics');
 const mediaRoutes     = require('./routes/media');
 
 const app  = express();
+app.set('trust proxy', 1); // Trust first-hop reverse proxy (Nginx) for client IP and rate limiting
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: { origin: '*', methods: ['GET', 'POST'] }
@@ -51,12 +52,16 @@ app.use(cors({
 app.use(express.json({ limit: '25mb' }));
 app.use(express.urlencoded({ extended: true, limit: '25mb' }));
 
-const publicDir = path.isAbsolute(process.env.PUBLIC_DIR || '')
-  ? process.env.PUBLIC_DIR
-  : path.join(__dirname, '..', process.env.PUBLIC_DIR || 'public');
-if (!fs.existsSync(publicDir)) fs.mkdirSync(publicDir, { recursive: true });
+const { getPublicDir } = require('./utils/paths');
+const publicDir = getPublicDir();
+const uploadsDir = path.resolve(__dirname, '../uploads');
+if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true, mode: 0o755 });
+
+// Serve static CDN assets on both /public and /api/public (for Nginx compatibility)
 app.use('/public', express.static(publicDir));
-app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+app.use('/api/public', express.static(publicDir));
+app.use('/uploads', express.static(uploadsDir));
+app.use('/api/uploads', express.static(uploadsDir));
 
 // ── Global rate limiter ────────────────────────────────────────────
 app.use('/api/', rateLimit({
@@ -64,6 +69,7 @@ app.use('/api/', rateLimit({
   max: 500,
   standardHeaders: true,
   legacyHeaders: false,
+  validate: { xForwardedForHeader: false },
   message: { error: 'Too many requests, please slow down.' },
 }));
 

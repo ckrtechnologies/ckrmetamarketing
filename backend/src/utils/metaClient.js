@@ -126,4 +126,26 @@ async function downloadMediaData(url, accessToken) {
   }
 }
 
-module.exports = { metaCall, sendTemplate, sendText, getTemplates, createTemplate, deleteTemplate, sendMedia, getMediaUrl, downloadMediaData };
+/**
+ * Mark a message as read in Meta WhatsApp (sends blue ticks to the customer)
+ */
+async function markMessageAsRead(phoneNumberId, accessToken, messageId) {
+  return metaCall('POST', `/${phoneNumberId}/messages`, accessToken, {
+    messaging_product: 'whatsapp',
+    status: 'read',
+    message_id: messageId,
+  });
+}
+
+module.exports = {
+  metaCall,
+  sendTemplate,
+  sendText,
+  getTemplates,
+  createTemplate,
+  deleteTemplate,
+  sendMedia,
+  getMediaUrl,
+  downloadMediaData,
+  markMessageAsRead,
+};

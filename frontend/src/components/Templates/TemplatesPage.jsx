@@ -79,12 +79,14 @@ export default function TemplatesPage() {
 
   // Filtered Templates
   const filteredTemplates = templates.filter(t => {
-    if (statusFilter !== 'ALL' && t.status?.toUpperCase() !== statusFilter) return false;
-    if (categoryFilter !== 'ALL' && t.category?.toUpperCase() !== categoryFilter) return false;
+    const s = String(t.status || '').toUpperCase();
+    const c = String(t.category || '').toUpperCase();
+    if (statusFilter !== 'ALL' && s !== statusFilter) return false;
+    if (categoryFilter !== 'ALL' && c !== categoryFilter) return false;
     if (search.trim()) {
       const q = search.toLowerCase();
-      const bodyText = t.components?.find(c => c.type === 'BODY')?.text || '';
-      return t.name.toLowerCase().includes(q) || bodyText.toLowerCase().includes(q);
+      const bodyText = t.components?.find(comp => comp.type === 'BODY')?.text || '';
+      return (t.name || '').toLowerCase().includes(q) || bodyText.toLowerCase().includes(q);
     }
     return true;
   });
@@ -92,24 +94,26 @@ export default function TemplatesPage() {
   // Status counts
   const counts = {
     ALL: templates.length,
-    APPROVED: templates.filter(t => ['APPROVED', 'ACTIVE'].includes(t.status?.toUpperCase())).length,
-    PENDING: templates.filter(t => t.status?.toUpperCase() === 'PENDING').length,
-    REJECTED: templates.filter(t => t.status?.toUpperCase() === 'REJECTED').length,
-    PAUSED: templates.filter(t => t.status?.toUpperCase() === 'PAUSED').length,
+    APPROVED: templates.filter(t => ['APPROVED', 'ACTIVE'].includes(String(t.status || '').toUpperCase())).length,
+    PENDING: templates.filter(t => String(t.status || '').toUpperCase() === 'PENDING').length,
+    REJECTED: templates.filter(t => String(t.status || '').toUpperCase() === 'REJECTED').length,
+    PAUSED: templates.filter(t => String(t.status || '').toUpperCase() === 'PAUSED').length,
   };
 
   function getStatusBadge(status) {
-    const s = (status || '').toUpperCase();
+    const s = String(status || '').toUpperCase();
     if (s === 'APPROVED' || s === 'ACTIVE') return <span className="badge badge--green">✅ Approved</span>;
     if (s === 'PENDING') return <span className="badge badge--yellow">⏳ In Review</span>;
     if (s === 'REJECTED') return <span className="badge badge--red">❌ Rejected</span>;
     if (s === 'PAUSED') return <span className="badge badge--yellow">⏸ Paused</span>;
-    return <span className="badge badge--ghost">{status}</span>;
+    return <span className="badge badge--ghost">{String(status || '')}</span>;
   }
 
   function getQualityBadge(quality) {
     if (!quality) return null;
-    const q = quality.toUpperCase();
+    const raw = typeof quality === 'object' ? quality?.score : quality;
+    if (!raw || typeof raw !== 'string') return null;
+    const q = raw.toUpperCase();
     if (q === 'GREEN') return <span className="badge badge--green" style={{ fontSize: 9.5 }}>High Quality</span>;
     if (q === 'YELLOW') return <span className="badge badge--yellow" style={{ fontSize: 9.5 }}>Medium Quality</span>;
     if (q === 'RED') return <span className="badge badge--red" style={{ fontSize: 9.5 }}>Low Quality</span>;
@@ -125,11 +129,11 @@ export default function TemplatesPage() {
           <p>Create, manage, and monitor approved Meta Cloud API templates without leaving your dashboard.</p>
         </div>
 
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           {wabaAccounts.length > 1 && (
             <select
               className="form-select"
-              style={{ width: 200, padding: '8px 12px' }}
+              style={{ width: 180, padding: '5px 10px', fontSize: 12 }}
               value={selectedWaba?.id || ''}
               onChange={e => handleWabaChange(e.target.value)}
             >
@@ -142,7 +146,7 @@ export default function TemplatesPage() {
           )}
 
           <button
-            className="btn btn--secondary"
+            className="btn btn--secondary btn--sm"
             onClick={() => loadTemplates(selectedWaba?.id)}
             disabled={loading || !selectedWaba}
             title="Fetch latest statuses from Meta"
@@ -151,7 +155,7 @@ export default function TemplatesPage() {
           </button>
 
           <button
-            className="btn btn--primary"
+            className="btn btn--primary btn--sm"
             onClick={() => setShowBuilder(true)}
             disabled={!selectedWaba}
           >
@@ -160,7 +164,11 @@ export default function TemplatesPage() {
         </div>
       </div>
 
-      {error && <div className="alert alert--danger" style={{ marginBottom: 20 }}>{error}</div>}
+      {error && (
+        <div className="alert alert--danger" style={{ marginBottom: 10, fontSize: 12 }}>
+          ⚠️ {error}
+        </div>
+      )}
 
       {/* Filters Bar */}
       <div className="templates-filters">
@@ -182,10 +190,10 @@ export default function TemplatesPage() {
           ))}
         </div>
 
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <select
             className="form-select"
-            style={{ width: 140, padding: '6px 10px', fontSize: 12.5 }}
+            style={{ width: 130, padding: '5px 8px', fontSize: 12 }}
             value={categoryFilter}
             onChange={e => setCategoryFilter(e.target.value)}
           >
@@ -197,7 +205,7 @@ export default function TemplatesPage() {
 
           <input
             className="form-input"
-            style={{ width: 220, padding: '6px 12px', fontSize: 13 }}
+            style={{ width: 200, padding: '5px 10px', fontSize: 12 }}
             placeholder="🔍 Search templates..."
             value={search}
             onChange={e => setSearch(e.target.value)}
@@ -207,22 +215,22 @@ export default function TemplatesPage() {
 
       {/* Templates Content */}
       {loading ? (
-        <div style={{ textAlign: 'center', padding: '80px 20px' }}>
-          <span className="spinner" style={{ width: 32, height: 32, margin: '0 auto 16px' }} />
-          <div style={{ color: 'var(--clr-text-2)', fontSize: 14 }}>Loading templates from Meta...</div>
+        <div style={{ textAlign: 'center', padding: '48px 20px' }}>
+          <span className="spinner" style={{ width: 28, height: 28, margin: '0 auto 12px' }} />
+          <div style={{ color: 'var(--text-secondary, #475569)', fontSize: 13 }}>Loading templates from Meta...</div>
         </div>
       ) : filteredTemplates.length === 0 ? (
-        <div className="card" style={{ textAlign: 'center', padding: '60px 20px', borderRadius: 16 }}>
-          <div style={{ fontSize: 44, marginBottom: 12 }}>📝</div>
-          <div style={{ fontSize: 16, fontWeight: 700, color: '#fff', marginBottom: 6 }}>
+        <div className="card" style={{ textAlign: 'center', padding: '36px 20px', borderRadius: 'var(--radius-md, 8px)', border: '1px solid var(--border-default, #e2e8f0)', background: 'var(--bg-surface, #ffffff)', width: '100%' }}>
+          <div style={{ fontSize: 36, marginBottom: 8 }}>📝</div>
+          <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary, #0f172a)', marginBottom: 4 }}>
             No message templates found
           </div>
-          <p style={{ color: 'var(--clr-text-3)', fontSize: 13.5, maxWidth: 420, margin: '0 auto 20px' }}>
+          <p style={{ color: 'var(--text-secondary, #475569)', fontSize: 12.5, maxWidth: 460, margin: '0 auto 16px' }}>
             {search || statusFilter !== 'ALL'
               ? 'Try adjusting your search query or status filter.'
               : 'Create your first WhatsApp template and submit it directly to Meta for instant approval.'}
           </p>
-          <button className="btn btn--primary" onClick={() => setShowBuilder(true)}>
+          <button className="btn btn--primary btn--sm" onClick={() => setShowBuilder(true)}>
             ✨ Create New Template
           </button>
         </div>
@@ -242,7 +250,7 @@ export default function TemplatesPage() {
                       <div className="template-card-cat">
                         <span>{t.category || 'MARKETING'}</span>
                         <span>•</span>
-                        <span>{t.language?.toUpperCase() || 'EN'}</span>
+                        <span>{(typeof t.language === 'string' ? t.language : t.language?.code || 'EN').toUpperCase()}</span>
                         {getQualityBadge(t.quality_score)}
                       </div>
                     </div>
@@ -259,12 +267,12 @@ export default function TemplatesPage() {
                   {/* Preview Box */}
                   <div className="template-card-preview">
                     {headerComp && headerComp.text && (
-                      <div style={{ fontWeight: 700, marginBottom: 4, color: '#fff' }}>
+                      <div style={{ fontWeight: 700, marginBottom: 4, color: 'var(--text-primary, #0f172a)' }}>
                         {headerComp.text}
                       </div>
                     )}
                     {headerComp && ['IMAGE', 'DOCUMENT', 'VIDEO'].includes(headerComp.format) && (
-                      <div style={{ fontSize: 11, color: '#25d366', marginBottom: 4 }}>
+                      <div style={{ fontSize: 11, color: '#047857', marginBottom: 4 }}>
                         [{headerComp.format.toLowerCase()} header]
                       </div>
                     )}

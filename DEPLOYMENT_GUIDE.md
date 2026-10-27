@@ -103,7 +103,7 @@ WHATSAPP_VERIFY_TOKEN=ckrmetamarketing_verify_token
 # ── File Upload & CDN ─────────────────────────────────────────
 UPLOAD_DIR=uploads/
 PUBLIC_DIR=public
-CDN_BASE_URL=https://metacrm-api.ckrtechnologies.in/public
+CDN_BASE_URL=https://metacrm-api.ckrtechnologies.in/api/public
 
 # ── Redis (for queues) ────────────────────────────────────────
 REDIS_URL=redis://localhost:6379
@@ -241,7 +241,15 @@ server {
         proxy_send_timeout 86400s;
     }
 
-    # ── 2. Meta WhatsApp Webhooks & REST API ───────────────────
+    # ── 2. Public CDN Media Storage ────────────────────────────
+    location /public/ {
+        alias /var/www/ckr/metamarketing/backend/public/;
+        expires 30d;
+        add_header Access-Control-Allow-Origin *;
+        add_header Cache-Control "public, no-transform";
+    }
+
+    # ── 3. Meta WhatsApp Webhooks & REST API ───────────────────
     location / {
         proxy_pass http://127.0.0.1:5003;
         proxy_http_version 1.1;

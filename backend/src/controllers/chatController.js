@@ -1,6 +1,7 @@
 const chatRepo = require('../repositories/chatRepo');
 const orgRepo  = require('../repositories/orgRepo');
-const { sendText, sendTemplate, sendMedia } = require('../utils/metaClient');
+const { sendText, sendTemplate, sendMedia, markMessageAsRead } = require('../utils/metaClient');
+const { getOrgPublicDir } = require('../utils/paths');
 const fs = require('fs');
 const path = require('path');
 
@@ -44,6 +45,24 @@ async function getConversation(req, res) {
     const conv = await chatRepo.getConversationById(req.orgId, req.params.id);
     const msgs  = await chatRepo.getMessages(req.params.id, { limit: 100 });
     await chatRepo.markConversationRead(req.orgId, req.params.id);
+
+    // If there are inbound messages, mark the latest one as read on Meta (sends blue ticks to WhatsApp customer)
+    try {
+      const inboundMsgs = (msgs.messages || []).filter(m => m.direction === 'inbound' && m.wamid);
+      const lastInbound = inboundMsgs[inboundMsgs.length - 1];
+      if (lastInbound) {
+        const wabaAccounts = await orgRepo.getWabaAccounts(req.orgId);
+        const waba = (conv.waba_id ? wabaAccounts.find(a => a.id === conv.waba_id) : null) || wabaAccounts[0];
+        if (waba && waba.phone_number_id && waba.access_token) {
+          markMessageAsRead(waba.phone_number_id, waba.access_token, lastInbound.wamid).catch(e => {
+            console.warn('[markMessageAsRead error]', e.message);
+          });
+        }
+      }
+    } catch (readErr) {
+      console.warn('[read-receipt-sync]', readErr.message);
+    }
+
     res.json({ conversation: conv, ...msgs });
   } catch (err) { res.status(500).json({ error: err.message }); }
 }
@@ -171,15 +190,13 @@ async function sendMediaReply(req, res) {
     if (!convWaba) return res.status(404).json({ error: 'WABA not found for this conversation' });
 
     // Save file locally to CDN public dir
-    const pubDir = process.env.PUBLIC_DIR || path.join(__dirname, '../../public');
-    const orgDir = path.join(pubDir, req.orgId, 'chat');
-    if (!fs.existsSync(orgDir)) fs.mkdirSync(orgDir, { recursive: true });
+    const orgDir = getOrgPublicDir(req.orgId, 'chat');
 
     // Sanitize filename to avoid spaces and special chars
     const safeName = file.originalname.replace(/[^a-zA-Z0-9.-]/g, '_');
     const filename = `${Date.now()}_${safeName}`;
     const filepath = path.join(orgDir, filename);
-    fs.writeFileSync(filepath, file.buffer);
+    fs.writeFileSync(filepath, file.buffer, { mode: 0o644 });
 
     const cdnBase = process.env.CDN_BASE_URL || 'http://localhost:5001/public';
     const mediaLink = `${cdnBase}/${req.orgId}/chat/${filename}`;
