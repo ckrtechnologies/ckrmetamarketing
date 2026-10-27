@@ -9,17 +9,17 @@ async function uploadMedia(req, res) {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
 
     const orgId = req.orgId;
-    const orgDir = getOrgPublicDir(orgId);
+    const docsDir = getOrgPublicDir(orgId, 'docs');
     
     // Create a safe, unique filename
     const safeName = req.file.originalname.replace(/[^a-zA-Z0-9.\-_]/g, '');
     const timestamp = Date.now();
     const finalName = `${timestamp}_${safeName}`;
-    const filePath = path.join(orgDir, finalName);
+    const filePath = path.join(docsDir, finalName);
     
     fs.writeFileSync(filePath, req.file.buffer);
 
-    const publicUrl = `${CDN_BASE_URL}/${orgId}/${finalName}`;
+    const publicUrl = `${CDN_BASE_URL}/${orgId}/docs/${finalName}`;
 
     res.status(201).json({
       message: 'File uploaded successfully',
@@ -36,25 +36,68 @@ async function uploadMedia(req, res) {
 async function listMedia(req, res) {
   try {
     const orgId = req.orgId;
-    const orgDir = getOrgPublicDir(orgId);
+    const docsDir = getOrgPublicDir(orgId, 'docs');
+    const rootDir = getOrgPublicDir(orgId);
 
-    const files = fs.readdirSync(orgDir);
-    const mediaList = files
-      .map(filename => {
-        const filePath = path.join(orgDir, filename);
-        const stats = fs.statSync(filePath);
-        return { filename, filePath, stats };
-      })
-      .filter(({ stats }) => stats.isFile())
-      .map(({ filename, stats }) => ({
-        filename,
-        url: `${CDN_BASE_URL}/${orgId}/${filename}`,
-        size: stats.size,
-        created_at: stats.mtime
-      }));
+    const mediaList = [];
+    const seenFilenames = new Set();
+
+    // 1. All explicitly uploaded docs & assets from the dedicated 'docs/' subfolder
+    if (fs.existsSync(docsDir)) {
+      const docFiles = fs.readdirSync(docsDir);
+      for (const filename of docFiles) {
+        const filePath = path.join(docsDir, filename);
+        try {
+          const stats = fs.statSync(filePath);
+          if (stats.isFile()) {
+            seenFilenames.add(filename);
+            mediaList.push({
+              filename,
+              url: `${CDN_BASE_URL}/${orgId}/docs/${filename}`,
+              size: stats.size,
+              created_at: stats.mtime
+            });
+          }
+        } catch (_) {}
+      }
+    }
+
+    // 2. Previously uploaded documents in rootDir (strictly excluding chat folder and chat media)
+    const DOC_EXTS = ['.pdf', '.doc', '.docx', '.xls', '.xlsx', '.csv', '.txt'];
+    const CHAT_AUDIO_EXTS = ['.ogg', '.opus', '.oga', '.m4a', '.wav', '.mp3'];
+
+    if (fs.existsSync(rootDir)) {
+      const rootFiles = fs.readdirSync(rootDir);
+      for (const filename of rootFiles) {
+        if (filename === 'chat' || filename === 'docs') continue;
+        if (seenFilenames.has(filename)) continue;
+
+        const filePath = path.join(rootDir, filename);
+        try {
+          const stats = fs.statSync(filePath);
+          if (!stats.isFile()) continue;
+
+          const ext = path.extname(filename).toLowerCase();
+          // Exclude WhatsApp voice notes and inbound numeric webhook IDs
+          if (CHAT_AUDIO_EXTS.includes(ext)) continue;
+          if (/^\d+\.[a-zA-Z0-9]+$/.test(filename)) continue;
+
+          // Only show documents or user-named files (not chat multimedia)
+          if (DOC_EXTS.includes(ext) || (!filename.includes('_chat_') && !filename.startsWith('chat_'))) {
+            // If it's an image/video, only include if it was an intentional user upload (e.g. has timestamp_name pattern and not in chat)
+            mediaList.push({
+              filename,
+              url: `${CDN_BASE_URL}/${orgId}/${filename}`,
+              size: stats.size,
+              created_at: stats.mtime
+            });
+          }
+        } catch (_) {}
+      }
+    }
 
     // Sort by newest first
-    mediaList.sort((a, b) => b.created_at - a.created_at);
+    mediaList.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
     res.json({ files: mediaList });
   } catch (err) {
@@ -67,14 +110,16 @@ async function deleteMedia(req, res) {
   try {
     const { filename } = req.params;
     const orgId = req.orgId;
-    const orgDir = getOrgPublicDir(orgId);
-    
-    // Prevent directory traversal
     const safeFilename = path.basename(filename);
-    const filePath = path.join(orgDir, safeFilename);
 
-    if (fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
+    const docsPath = path.join(getOrgPublicDir(orgId, 'docs'), safeFilename);
+    const rootPath = path.join(getOrgPublicDir(orgId), safeFilename);
+
+    if (fs.existsSync(docsPath)) {
+      fs.unlinkSync(docsPath);
+      res.json({ message: 'File deleted' });
+    } else if (fs.existsSync(rootPath)) {
+      fs.unlinkSync(rootPath);
       res.json({ message: 'File deleted' });
     } else {
       res.status(404).json({ error: 'File not found' });
