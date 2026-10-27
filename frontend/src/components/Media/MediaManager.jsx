@@ -110,8 +110,8 @@ export default function MediaManager() {
     <div className="fade-in">
       <div className="page-header">
         <div>
-          <h1>📁 Uploaded Documents & Assets</h1>
-          <p>{filteredFiles.length} uploaded files (isolated from live chat multimedia)</p>
+          <h1>📁 My Uploaded Documents</h1>
+          <p>{filteredFiles.length} files • Only documents you upload appear here (user-generated chat files are excluded).</p>
         </div>
         
         <div className="page-header__actions">

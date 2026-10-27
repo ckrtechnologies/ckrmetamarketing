@@ -37,12 +37,10 @@ async function listMedia(req, res) {
   try {
     const orgId = req.orgId;
     const docsDir = getOrgPublicDir(orgId, 'docs');
-    const rootDir = getOrgPublicDir(orgId);
 
     const mediaList = [];
-    const seenFilenames = new Set();
 
-    // 1. All explicitly uploaded docs & assets from the dedicated 'docs/' subfolder
+    // ONLY show files from the dedicated 'docs/' subfolder (files explicitly uploaded by the admin)
     if (fs.existsSync(docsDir)) {
       const docFiles = fs.readdirSync(docsDir);
       for (const filename of docFiles) {
@@ -50,44 +48,9 @@ async function listMedia(req, res) {
         try {
           const stats = fs.statSync(filePath);
           if (stats.isFile()) {
-            seenFilenames.add(filename);
             mediaList.push({
               filename,
               url: `${CDN_BASE_URL}/${orgId}/docs/${filename}`,
-              size: stats.size,
-              created_at: stats.mtime
-            });
-          }
-        } catch (_) {}
-      }
-    }
-
-    // 2. Previously uploaded documents in rootDir (strictly excluding chat folder and chat media)
-    const DOC_EXTS = ['.pdf', '.doc', '.docx', '.xls', '.xlsx', '.csv', '.txt'];
-    const CHAT_AUDIO_EXTS = ['.ogg', '.opus', '.oga', '.m4a', '.wav', '.mp3'];
-
-    if (fs.existsSync(rootDir)) {
-      const rootFiles = fs.readdirSync(rootDir);
-      for (const filename of rootFiles) {
-        if (filename === 'chat' || filename === 'docs') continue;
-        if (seenFilenames.has(filename)) continue;
-
-        const filePath = path.join(rootDir, filename);
-        try {
-          const stats = fs.statSync(filePath);
-          if (!stats.isFile()) continue;
-
-          const ext = path.extname(filename).toLowerCase();
-          // Exclude WhatsApp voice notes and inbound numeric webhook IDs
-          if (CHAT_AUDIO_EXTS.includes(ext)) continue;
-          if (/^\d+\.[a-zA-Z0-9]+$/.test(filename)) continue;
-
-          // Only show documents or user-named files (not chat multimedia)
-          if (DOC_EXTS.includes(ext) || (!filename.includes('_chat_') && !filename.startsWith('chat_'))) {
-            // If it's an image/video, only include if it was an intentional user upload (e.g. has timestamp_name pattern and not in chat)
-            mediaList.push({
-              filename,
-              url: `${CDN_BASE_URL}/${orgId}/${filename}`,
               size: stats.size,
               created_at: stats.mtime
             });
@@ -111,15 +74,10 @@ async function deleteMedia(req, res) {
     const { filename } = req.params;
     const orgId = req.orgId;
     const safeFilename = path.basename(filename);
-
     const docsPath = path.join(getOrgPublicDir(orgId, 'docs'), safeFilename);
-    const rootPath = path.join(getOrgPublicDir(orgId), safeFilename);
 
     if (fs.existsSync(docsPath)) {
       fs.unlinkSync(docsPath);
-      res.json({ message: 'File deleted' });
-    } else if (fs.existsSync(rootPath)) {
-      fs.unlinkSync(rootPath);
       res.json({ message: 'File deleted' });
     } else {
       res.status(404).json({ error: 'File not found' });
