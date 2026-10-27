@@ -10,4 +10,7 @@ export const sendMediaReply      = (id, formData)=> apiCall('POST', `/v2/chat/co
 export const sendTemplateInChat  = (id, data)    => apiCall('POST', `/v2/chat/conversations/${id}/send-template`, data);
 export const closeConversation   = (id)          => apiCall('POST', `/v2/chat/conversations/${id}/close`);
 export const assignConversation  = (id, user_id) => apiCall('POST', `/v2/chat/conversations/${id}/assign`, { user_id });
+export const deleteConversation  = (id)          => apiCall('DELETE', `/v2/chat/conversations/${id}`);
+export const deleteMessage       = (messageId)   => apiCall('DELETE', `/v2/chat/messages/${messageId}`);
 export const getUnreadCount      = ()            => apiCall('GET',  '/v2/chat/unread');
+

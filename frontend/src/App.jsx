@@ -8,6 +8,7 @@ import Dashboard     from './components/Dashboard/Dashboard.jsx';
 import WABAPage      from './components/WhatsApp/WABAPage.jsx';
 import ContactsPage  from './components/Contacts/ContactsPage.jsx';
 import CampaignList  from './components/Campaign/CampaignList.jsx';
+import TemplatesPage from './components/Templates/TemplatesPage.jsx';
 import ChatPage      from './components/Chat/ChatPage.jsx';
 import ReportsPage   from './components/Reports/ReportsPage.jsx';
 import MediaManager  from './components/Media/MediaManager.jsx';
@@ -61,6 +62,11 @@ export default function App() {
         <Route path="/campaigns" element={
           <ProtectedRoute user={user} org={org} title="Campaigns">
             <CampaignList />
+          </ProtectedRoute>
+        } />
+        <Route path="/templates" element={
+          <ProtectedRoute user={user} org={org} title="Message Templates">
+            <TemplatesPage />
           </ProtectedRoute>
         } />
         <Route path="/contacts" element={

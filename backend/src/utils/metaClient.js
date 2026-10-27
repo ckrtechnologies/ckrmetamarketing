@@ -66,7 +66,21 @@ async function sendText(phoneNumberId, accessToken, to, text) {
  * Fetch templates for a WABA
  */
 async function getTemplates(wabaId, accessToken) {
-  return metaCall('GET', `/${wabaId}/message_templates?limit=100&fields=id,name,status,language,components`, accessToken);
+  return metaCall('GET', `/${wabaId}/message_templates?limit=100&fields=id,name,status,category,language,components,quality_score,rejected_reason`, accessToken);
+}
+
+/**
+ * Create a new message template in Meta WABA
+ */
+async function createTemplate(wabaId, accessToken, templateData) {
+  return metaCall('POST', `/${wabaId}/message_templates`, accessToken, templateData);
+}
+
+/**
+ * Delete a message template by name in Meta WABA
+ */
+async function deleteTemplate(wabaId, accessToken, templateName) {
+  return metaCall('DELETE', `/${wabaId}/message_templates?name=${encodeURIComponent(templateName)}`, accessToken);
 }
 
 /**
@@ -112,4 +126,4 @@ async function downloadMediaData(url, accessToken) {
   }
 }
 
-module.exports = { metaCall, sendTemplate, sendText, getTemplates, sendMedia, getMediaUrl, downloadMediaData };
+module.exports = { metaCall, sendTemplate, sendText, getTemplates, createTemplate, deleteTemplate, sendMedia, getMediaUrl, downloadMediaData };

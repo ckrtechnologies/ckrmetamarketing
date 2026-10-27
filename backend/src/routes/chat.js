@@ -3,7 +3,7 @@ const { authenticate, requireRole } = require('../middleware/auth');
 const ctrl = require('../controllers/chatController');
 
 router.get('/unread',                              authenticate, ctrl.getUnreadCount);
-router.get('/conversations',                       authenticate, ctrl.listConversations);
+router.get('/conversations',                        authenticate, ctrl.listConversations);
 router.post('/start',                              authenticate, ctrl.startConversation);
 router.get('/conversations/:id',                   authenticate, ctrl.getConversation);
 router.get('/conversations/:id/messages',          authenticate, ctrl.getMessages);
@@ -19,5 +19,8 @@ router.post('/conversations/:id/send-media',       authenticate, upload.single('
 router.post('/conversations/:id/send-template',    authenticate, ctrl.sendTemplateInChat);
 router.post('/conversations/:id/close',            authenticate, ctrl.closeConversation);
 router.post('/conversations/:id/assign',           authenticate, ctrl.assignConversation);
+router.delete('/conversations/:id',                authenticate, requireRole('owner', 'admin'), ctrl.deleteConversation);
+router.delete('/messages/:messageId',              authenticate, ctrl.deleteMessage);
 
 module.exports = router;
+

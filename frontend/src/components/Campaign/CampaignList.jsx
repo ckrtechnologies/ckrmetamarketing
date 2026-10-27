@@ -79,7 +79,7 @@ export default function CampaignList() {
           <p>{total} campaigns total • Trigger template messages to targeted contact lists</p>
         </div>
         <div className="page-header__actions">
-          <button className="btn btn--primary btn--sm" onClick={() => setShowBuilder(true)}>+ New Campaign</button>
+          <button className="btn btn--primary btn--sm" onClick={() => { setEditingCampaign(null); setIsDuplicate(false); setShowBuilder(true); }}>+ New Campaign</button>
         </div>
       </div>
 
@@ -92,7 +92,7 @@ export default function CampaignList() {
           <div style={{ fontSize: 36, marginBottom: 10 }}>📣</div>
           <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 16, marginBottom: 6, color: 'var(--text-primary)' }}>No campaigns yet</h2>
           <p style={{ color: 'var(--text-secondary)', fontSize: 12.5, marginBottom: 14 }}>Create your first WhatsApp campaign to start reaching customers.</p>
-          <button className="btn btn--primary btn--sm" onClick={() => setShowBuilder(true)}>+ Create Campaign</button>
+          <button className="btn btn--primary btn--sm" onClick={() => { setEditingCampaign(null); setIsDuplicate(false); setShowBuilder(true); }}>+ Create Campaign</button>
         </div>
       ) : (
         <div className="table-wrap">
@@ -151,6 +151,22 @@ export default function CampaignList() {
                         </button>
                       )}
                       {['paused', 'draft'].includes(c.status) && (
+                        <button
+                          className="btn btn--secondary btn--xs"
+                          onClick={() => { setEditingCampaign(c); setIsDuplicate(false); setShowBuilder(true); }}
+                          title="Edit Campaign"
+                        >
+                          ✏️ Edit
+                        </button>
+                      )}
+                      <button
+                        className="btn btn--secondary btn--xs"
+                        onClick={() => { setEditingCampaign(c); setIsDuplicate(true); setShowBuilder(true); }}
+                        title="Clone / Duplicate Campaign"
+                      >
+                        📋 Clone
+                      </button>
+                      {['paused', 'draft', 'failed', 'completed'].includes(c.status) && (
                         <button className="btn btn--danger btn--xs" onClick={() => handleDelete(c.id)} title="Delete">
                           ✕
                         </button>
@@ -166,9 +182,11 @@ export default function CampaignList() {
 
       {showBuilder && (
         <CampaignBuilder
-          onClose={() => setShowBuilder(false)}
-          onCreated={() => { setShowBuilder(false); loadCampaigns(); }}
-          onSuccess={() => { setShowBuilder(false); loadCampaigns(); }}
+          campaignToEdit={editingCampaign}
+          isDuplicate={isDuplicate}
+          onClose={() => { setShowBuilder(false); setEditingCampaign(null); setIsDuplicate(false); }}
+          onCreated={() => { setShowBuilder(false); setEditingCampaign(null); setIsDuplicate(false); loadCampaigns(); }}
+          onSuccess={() => { setShowBuilder(false); setEditingCampaign(null); setIsDuplicate(false); loadCampaigns(); }}
         />
       )}
     </div>

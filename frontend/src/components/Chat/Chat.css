@@ -631,3 +631,28 @@
   gap: 4px;
 }
 
+
+/* Delete message micro-action on hover */
+.msg-del-btn {
+  background: none;
+  border: none;
+  color: var(--clr-text-3, #8e9bb0);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 4px;
+  margin-left: 4px;
+  opacity: 0;
+  border-radius: 4px;
+  transition: opacity 0.15s ease, color 0.15s ease;
+}
+
+.msg-bubble:hover .msg-del-btn {
+  opacity: 0.6;
+}
+
+.msg-del-btn:hover {
+  opacity: 1 !important;
+  color: var(--clr-danger, #ff4d4f) !important;
+  background: rgba(255, 77, 79, 0.12);
+}

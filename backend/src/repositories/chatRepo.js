@@ -240,9 +240,30 @@ async function getNewMessagesSince(conversation_id, since) {
   return data || [];
 }
 
+async function deleteConversation(org_id, id) {
+  await supabase.from('messages').delete().eq('conversation_id', id);
+  const { error } = await supabase
+    .from('conversations')
+    .delete()
+    .eq('id', id)
+    .eq('org_id', org_id);
+  if (error) throw error;
+  return true;
+}
+
+async function deleteMessage(message_id) {
+  const { error } = await supabase
+    .from('messages')
+    .delete()
+    .eq('id', message_id);
+  if (error) throw error;
+  return true;
+}
+
 module.exports = {
   upsertConversation, getConversations, getConversationById, findConversationByPhone,
-  markConversationRead, closeConversation, assignConversation,
-  addMessage, getMessages, updateMessageStatus, getUnreadCount, getNewMessagesSince,
+  markConversationRead, closeConversation, assignConversation, deleteConversation,
+  addMessage, getMessages, updateMessageStatus, getUnreadCount, getNewMessagesSince, deleteMessage,
 };
+
 

@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { listWabaAccounts, getWabaTemplates } from '../../api/waba.js';
 import { listGroups } from '../../api/contacts.js';
-import { createCampaign } from '../../api/campaigns.js';
+import { createCampaign, updateCampaign } from '../../api/campaigns.js';
 import './Campaign.css';
 
 const STEPS = ['📱 Sender', '📝 Template', '👥 Audience', '🚀 Review'];
 
-export default function CampaignBuilder({ onClose, onCreated, onSuccess }) {
-  const [step,         setStep]         = useState(0);
+export default function CampaignBuilder({ onClose, onCreated, onSuccess, campaignToEdit, isDuplicate }) {
+  const isEditing = Boolean(campaignToEdit && !isDuplicate);
+  const [step,         setStep]         = useState(campaignToEdit ? 3 : 0);
   const [wabaAccounts, setWabaAccounts] = useState([]);
   const [templates,    setTemplates]    = useState([]);
   const [groups,       setGroups]       = useState([]);
@@ -15,19 +16,36 @@ export default function CampaignBuilder({ onClose, onCreated, onSuccess }) {
   const [error,        setError]        = useState('');
 
   const [form, setForm] = useState({
-    name: '',
-    waba_id: '',
-    template_name: '',
-    template_lang: 'en',
-    group_id: '',
-    variables: {}, // { "1": "{{name}}", "2": "SUMMER10" }
+    name: campaignToEdit ? (isDuplicate ? `${campaignToEdit.name} (Copy)` : campaignToEdit.name) : '',
+    waba_id: campaignToEdit?.waba_id || '',
+    template_name: campaignToEdit?.template_name || '',
+    template_lang: campaignToEdit?.template_lang || 'en',
+    group_id: campaignToEdit?.group_id || '',
+    variables: campaignToEdit?.variables || {},
   });
 
   useEffect(() => {
     Promise.all([listWabaAccounts(), listGroups()])
-      .then(([wa, gr]) => { setWabaAccounts(wa.accounts || []); setGroups(gr.groups || []); })
+      .then(async ([wa, gr]) => {
+        const accounts = wa.accounts || [];
+        setWabaAccounts(accounts);
+        setGroups(gr.groups || []);
+
+        const targetWabaId = campaignToEdit?.waba_id || (accounts[0]?.id);
+        if (targetWabaId) {
+          const acc = accounts.find(a => a.id === targetWabaId);
+          if (acc) {
+            try {
+              const data = await getWabaTemplates(acc.id);
+              setTemplates(data.templates || []);
+            } catch (tplErr) {
+              console.error('Failed to load templates:', tplErr);
+            }
+          }
+        }
+      })
       .catch(e => setError(e.message));
-  }, []);
+  }, [campaignToEdit]);
 
   async function handleWabaChange(waba_id) {
     setForm(f => ({ ...f, waba_id, template_name: '', template_lang: 'en', variables: {} }));
@@ -39,6 +57,7 @@ export default function CampaignBuilder({ onClose, onCreated, onSuccess }) {
       setTemplates(data.templates || []);
     } catch (e) { setError(e.message); }
   }
+
 
   const selectedTemplate = templates.find(t => t.name === form.template_name);
   const selectedWaba     = wabaAccounts.find(a => a.id === form.waba_id);
@@ -119,14 +138,19 @@ export default function CampaignBuilder({ onClose, onCreated, onSuccess }) {
     if (!form.name) { setError('Campaign name is required'); return; }
     setSaving(true); setError('');
     try {
-      await createCampaign({
+      const payload = {
         name: form.name,
         waba_id: form.waba_id,
         template_name: form.template_name,
         template_lang: form.template_lang,
         group_id: form.group_id || undefined,
         variables: form.variables,
-      });
+      };
+      if (isEditing) {
+        await updateCampaign(campaignToEdit.id, payload);
+      } else {
+        await createCampaign(payload);
+      }
       if (typeof onCreated === 'function') onCreated();
       else if (typeof onSuccess === 'function') onSuccess();
     } catch (err) { setError(err.message); setSaving(false); }
@@ -135,7 +159,8 @@ export default function CampaignBuilder({ onClose, onCreated, onSuccess }) {
   return (
     <div className="modal-overlay">
       <div className="modal-box" style={{ maxWidth: 680 }}>
-        <div className="modal-title">📣 New Campaign</div>
+        <div className="modal-title">{isEditing ? '✏️ Edit Campaign' : isDuplicate ? '📋 Duplicate Campaign' : '📣 New Campaign'}</div>
+
 
         {/* Step indicator */}
         <div className="campaign-steps">
@@ -333,9 +358,10 @@ export default function CampaignBuilder({ onClose, onCreated, onSuccess }) {
             </button>
           ) : (
             <button className="btn btn--primary" onClick={handleCreate} disabled={saving || !form.name}>
-              {saving ? <><span className="spinner" style={{ width: 16, height: 16 }} /> Creating...</> : '🚀 Create Campaign'}
+              {saving ? <><span className="spinner" style={{ width: 16, height: 16 }} /> Saving...</> : isEditing ? '💾 Save Changes' : isDuplicate ? '📋 Duplicate Campaign' : '🚀 Create Campaign'}
             </button>
           )}
+
         </div>
       </div>
     </div>

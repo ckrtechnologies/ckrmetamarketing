@@ -358,7 +358,38 @@ async function pollMessages(req, res) {
   } catch (err) { res.status(500).json({ error: err.message }); }
 }
 
+// DELETE /api/v2/chat/conversations/:id
+async function deleteConversation(req, res) {
+  try {
+    const conv = await chatRepo.getConversationById(req.orgId, req.params.id);
+    if (!conv) return res.status(404).json({ error: 'Conversation not found' });
+    await chatRepo.deleteConversation(req.orgId, req.params.id);
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('conversation_deleted', { conversation_id: req.params.id });
+    }
+    res.json({ message: 'Conversation deleted successfully' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+}
+
+// DELETE /api/v2/chat/messages/:messageId
+async function deleteMessage(req, res) {
+  try {
+    await chatRepo.deleteMessage(req.params.messageId);
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('message_deleted', { message_id: req.params.messageId });
+    }
+    res.json({ message: 'Message deleted successfully' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+}
+
 module.exports = {
-  listConversations, getConversation, closeConversation, assignConversation,
-  getMessages, sendReply, sendMediaReply, sendTemplateInChat, startConversation, getUnreadCount, pollMessages,
+  listConversations, getConversation, closeConversation, assignConversation, deleteConversation,
+  getMessages, sendReply, sendMediaReply, sendTemplateInChat, startConversation, getUnreadCount, pollMessages, deleteMessage,
 };
+

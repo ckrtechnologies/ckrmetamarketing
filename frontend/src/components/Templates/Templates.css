@@ -1,0 +1,352 @@
+/* ── Templates Management Module Styles ────────────────────────── */
+
+.templates-container {
+  padding: 24px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.templates-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.templates-title h1 {
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--clr-text-1, #fff);
+  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.templates-title p {
+  color: var(--clr-text-3, #8e9bb0);
+  font-size: 13.5px;
+}
+
+/* Filter bar */
+.templates-filters {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--clr-surface, #121824);
+  border: 1px solid var(--clr-border, rgba(255, 255, 255, 0.08));
+  border-radius: 12px;
+  padding: 12px 16px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.templates-tabs {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+}
+
+.template-tab-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--clr-text-2, #b8c4d9);
+  padding: 6px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.template-tab-btn:hover {
+  background: rgba(255, 255, 255, 0.04);
+  color: #fff;
+}
+
+.template-tab-btn--active {
+  background: rgba(37, 211, 102, 0.12);
+  border-color: rgba(37, 211, 102, 0.3);
+  color: #25d366;
+}
+
+.template-tab-count {
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.template-tab-btn--active .template-tab-count {
+  background: #25d366;
+  color: #0b1f14;
+  font-weight: 700;
+}
+
+/* Template Grid */
+.templates-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 20px;
+}
+
+.template-card {
+  background: var(--clr-surface, #121824);
+  border: 1px solid var(--clr-border, rgba(255, 255, 255, 0.08));
+  border-radius: 14px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.template-card:hover {
+  border-color: rgba(37, 211, 102, 0.35);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  transform: translateY(-2px);
+}
+
+.template-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+
+.template-card-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: -0.01em;
+  word-break: break-all;
+}
+
+.template-card-cat {
+  font-size: 11px;
+  color: var(--clr-text-3, #8e9bb0);
+  text-transform: uppercase;
+  margin-top: 2px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.template-card-preview {
+  background: #0b1510;
+  border: 1px solid rgba(37, 211, 102, 0.15);
+  border-radius: 10px;
+  padding: 14px;
+  margin-bottom: 16px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #d1d7e0;
+  position: relative;
+  max-height: 160px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.template-card-footer-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  color: var(--clr-text-3, #8e9bb0);
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  margin-bottom: 16px;
+}
+
+.template-card-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+/* WhatsApp Phone Simulator */
+.wa-phone-frame {
+  width: 320px;
+  background: #0c1317;
+  border-radius: 28px;
+  border: 8px solid #222d34;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  height: 520px;
+}
+
+.wa-phone-notch {
+  height: 18px;
+  background: #111b21;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.wa-phone-notch-bar {
+  width: 60px;
+  height: 4px;
+  background: #333;
+  border-radius: 4px;
+}
+
+.wa-phone-header {
+  background: #1f2c34;
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.wa-phone-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: #25d366;
+  color: #0b1f14;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.wa-phone-chat-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #e9edef;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.wa-phone-screen {
+  flex: 1;
+  background: #0b141a;
+  background-image: radial-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+  background-size: 16px 16px;
+  padding: 16px 12px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+}
+
+.wa-bubble-container {
+  max-width: 95%;
+  align-self: flex-start;
+}
+
+.wa-bubble {
+  background: #202c33;
+  color: #e9edef;
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-size: 13px;
+  line-height: 1.45;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+
+.wa-bubble-header-media {
+  border-radius: 8px;
+  overflow: hidden;
+  margin-bottom: 8px;
+  background: #111b21;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 120px;
+  color: #8696a0;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.wa-bubble-header-text {
+  font-weight: 700;
+  font-size: 14px;
+  color: #fff;
+  margin-bottom: 6px;
+}
+
+.wa-bubble-body {
+  font-size: 13px;
+  color: #d1d7db;
+}
+
+.wa-bubble-var {
+  background: rgba(37, 211, 102, 0.15);
+  color: #25d366;
+  padding: 1px 4px;
+  border-radius: 4px;
+  font-weight: 600;
+}
+
+.wa-bubble-footer {
+  font-size: 11px;
+  color: #8696a0;
+  margin-top: 6px;
+}
+
+.wa-bubble-meta {
+  display: flex;
+  justify-content: flex-end;
+  font-size: 10.5px;
+  color: #8696a0;
+  margin-top: 4px;
+}
+
+.wa-bubble-btn {
+  background: #202c33;
+  color: #53bdeb;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  text-align: center;
+  padding: 8px 12px;
+  font-size: 12.5px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-radius: 0 0 12px 12px;
+}
+
+.wa-bubble-btn + .wa-bubble-btn {
+  border-radius: 0;
+}
+
+.wa-bubble-btn:last-child {
+  border-radius: 0 0 12px 12px;
+}
+
+/* Template Builder Modal Layout */
+.template-modal-layout {
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  gap: 24px;
+  align-items: start;
+}
+
+@media (max-width: 900px) {
+  .template-modal-layout {
+    grid-template-columns: 1fr;
+  }
+  .wa-phone-frame {
+    display: none;
+  }
+}

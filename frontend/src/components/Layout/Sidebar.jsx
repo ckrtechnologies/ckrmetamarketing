@@ -7,6 +7,7 @@ import './Layout.css';
 const NAV_ITEMS = [
   { path: '/dashboard',  icon: '📊', label: 'Dashboard',  color: '#4f46e5', bg: '#eef2ff' },
   { path: '/campaigns',  icon: '📣', label: 'Campaigns',  color: '#059669', bg: '#ecfdf5' },
+  { path: '/templates',  icon: '📑', label: 'Templates',  color: '#10b981', bg: '#ecfdf5' },
   { path: '/contacts',   icon: '👥', label: 'Contacts',   color: '#2563eb', bg: '#eff6ff' },
   { path: '/chat',       icon: '💬', label: 'Live Chat',  color: '#00a884', bg: '#e6f7f3', badge: true },
   { path: '/media',      icon: '📁', label: 'Documents',  color: '#7c3aed', bg: '#f5f3ff' },

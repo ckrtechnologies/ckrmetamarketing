@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { io } from 'socket.io-client';
 import {
-  listConversations, getConversation, sendReply, sendMediaReply, sendTemplateInChat, startConversation, closeConversation
+  listConversations, getConversation, sendReply, sendMediaReply, sendTemplateInChat, startConversation, closeConversation, deleteConversation, deleteMessage
 } from '../../api/chat.js';
 import { listContacts, listGroups, listTags } from '../../api/contacts.js';
 import { listWabaAccounts, getWabaTemplates } from '../../api/waba.js';
@@ -307,6 +307,20 @@ export default function ChatPage({ user, org }) {
       setMessages(prev =>
         prev.map(m => (m.wamid === wamid ? { ...m, status, [status + '_at']: timestamp } : m))
       );
+    });
+
+    socket.on('message_deleted', (data) => {
+      if (!data) return;
+      setMessages(prev => prev.filter(m => m.id !== data.message_id));
+    });
+
+    socket.on('conversation_deleted', (data) => {
+      if (!data) return;
+      setConversations(prev => prev.filter(c => c.id !== data.conversation_id));
+      if (activeConvRef.current?.id === data.conversation_id) {
+        setActiveConv(null);
+        setMessages([]);
+      }
     });
 
     return () => {
@@ -840,6 +854,14 @@ export default function ChatPage({ user, org }) {
                     ✕ Close Chat
                   </button>
                 )}
+                <button
+                  className="btn btn--ghost btn--sm"
+                  style={{ color: 'var(--clr-danger)' }}
+                  onClick={() => handleDeleteConv(activeConv.id)}
+                  title="Delete entire conversation"
+                >
+                  🗑️ Delete Chat
+                </button>
               </div>
             </div>
 
@@ -885,6 +907,14 @@ export default function ChatPage({ user, org }) {
                         <div className="msg-meta">
                           <span className="msg-time">{formatTime(item.sent_at)}</span>
                           {!isInbound && <MessageStatusIcon status={item.status} />}
+                          <button
+                            type="button"
+                            className="msg-del-btn"
+                            onClick={(e) => { e.stopPropagation(); handleDeleteMsg(item.id); }}
+                            title="Delete message from CRM"
+                          >
+                            ×
+                          </button>
                         </div>
                       </div>
                     </div>

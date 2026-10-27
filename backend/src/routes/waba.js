@@ -9,5 +9,7 @@ router.patch( '/:id',        authenticate, requireRole('owner', 'admin'), ctrl.u
 router.post(  '/:id/activate', authenticate, requireRole('owner', 'admin'), ctrl.activateWaba);
 router.delete('/:id',        authenticate, requireRole('owner', 'admin'), ctrl.deleteWaba);
 router.get(   '/:id/templates', authenticate, ctrl.listTemplates);
+router.post(  '/:id/templates', authenticate, requireRole('owner', 'admin'), ctrl.createTemplate);
+router.delete('/:id/templates/:name', authenticate, requireRole('owner', 'admin'), ctrl.deleteTemplate);
 
 module.exports = router;
